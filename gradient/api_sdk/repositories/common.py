@@ -2,7 +2,6 @@ import abc
 import collections
 import datetime
 import json
-import time
 
 import dateutil
 import six
@@ -467,12 +466,14 @@ class ListLogs(ListResources):
     def get_request_url(self, **kwargs):
         return "/jobs/logs"
 
-    def yield_logs(self, id, line=1, limit=10000):
+    def yield_logs(self, id, line=0, limit=10000):
 
         gen = self._get_logs_generator(id, line, limit)
         return gen
 
     def _get_logs_generator(self, id, line, limit):
+        last_line_number = line
+
         while True:
             logs = self.list(id=id, line=line, limit=limit)
 
@@ -481,8 +482,8 @@ class ListLogs(ListResources):
                 if log.message == "PSEOF":
                     return
 
+                last_line_number += 1
                 yield log
-                line += 1
 
     def _parse_objects(self, log_rows, **kwargs):
         serializer = serializers.LogRowSchema()

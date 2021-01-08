@@ -18,8 +18,6 @@ from gradient.commands.common import DetailsCommandMixin, StreamMetricsCommand, 
 
 @six.add_metaclass(abc.ABCMeta)
 class BaseDeploymentCommand(BaseCommand):
-    entity = "deployment"
-
     def _get_client(self, api_key, logger):
         client = DeploymentsClient(
             api_key=api_key,
@@ -29,10 +27,24 @@ class BaseDeploymentCommand(BaseCommand):
         return client
 
 
-class CreateDeploymentCommand(BaseDeploymentCommand):
+class HandleWorkspaceMixin(object):
+    def _handle_workspace(self, instance_dict):
+        handler = self.workspace_handler.handle(instance_dict)
+
+        instance_dict.pop("ignore_files", None)
+        instance_dict.pop("workspace", None)
+        if handler and handler != "none":
+            instance_dict["workspace_url"] = handler
+
+
+class CreateDeploymentCommand(BaseDeploymentCommand, HandleWorkspaceMixin):
+    def __init__(self, workspace_handler, *args, **kwargs):
+        super(CreateDeploymentCommand, self).__init__(*args, **kwargs)
+        self.workspace_handler = workspace_handler
+
     def execute(self, **kwargs):
         self._handle_auth(kwargs)
-
+        self._handle_workspace(kwargs)
         with halo.Halo(text="Creating new deployment", spinner="dots"):
             deployment_id = self.client.create(**kwargs)
 
@@ -119,8 +131,14 @@ class DeleteDeploymentCommand(BaseDeploymentCommand):
         self.logger.log("Deployment deleted")
 
 
-class UpdateDeploymentCommand(BaseDeploymentCommand):
+class UpdateDeploymentCommand(BaseDeploymentCommand, HandleWorkspaceMixin):
+    def __init__(self, workspace_handler, *args, **kwargs):
+        super(UpdateDeploymentCommand, self).__init__(*args, **kwargs)
+        self.workspace_handler = workspace_handler
+
     def execute(self, deployment_id, **kwargs):
+        self._handle_workspace(kwargs)
+
         with halo.Halo(text="Updating deployment data", spinner="dots"):
             self.client.update(deployment_id, **kwargs)
 
@@ -154,13 +172,13 @@ class GetDeploymentDetails(DetailsCommandMixin, BaseDeploymentCommand):
 
 class DeploymentAddTagsCommand(BaseDeploymentCommand):
     def execute(self, deployment_id, *args, **kwargs):
-        self.client.add_tags(deployment_id, entity=self.entity, **kwargs)
+        self.client.add_tags(deployment_id, **kwargs)
         self.logger.log("Tags added to deployment")
 
 
 class DeploymentRemoveTagsCommand(BaseDeploymentCommand):
     def execute(self, deployment_id, *args, **kwargs):
-        self.client.remove_tags(deployment_id, entity=self.entity, **kwargs)
+        self.client.remove_tags(deployment_id, **kwargs)
         self.logger.log("Tags removed from deployment")
 
 
@@ -199,4 +217,4 @@ class DeploymentLogsCommand(LogsCommandMixin, BaseDeploymentCommand):
     @staticmethod
     def _format_row(id, log_row):
         return (style(fg="red", text=str(log_row.line)),
-                log_row.message)
+                str(log_row.message).rstrip())

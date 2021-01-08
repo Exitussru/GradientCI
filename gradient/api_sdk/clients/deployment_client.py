@@ -3,11 +3,11 @@ Deployment related client handler logic.
 
 Remember that in code snippets all highlighted lines are required other lines are optional.
 """
-from .base_client import BaseClient
+from .base_client import BaseClient, TagsSupportMixin
 from .. import config, models, repositories
 
 
-class DeploymentsClient(BaseClient):
+class DeploymentsClient(TagsSupportMixin, BaseClient):
     """
     Client to handle deployment related actions.
 
@@ -50,6 +50,11 @@ class DeploymentsClient(BaseClient):
             auth_password=None,
             tags=None,
             command=None,
+            workspace_url=None,
+            workspace_ref=None,
+            workspace_username=None,
+            workspace_password=None,
+            project_id=None,
     ):
         """
         Method to create a Deployment instance.
@@ -94,6 +99,11 @@ class DeploymentsClient(BaseClient):
         :param str auth_password: Password
         :param list[str] tags: List of tags
         :param str command: Deployment command
+        :param str workspace_url: Project git or s3repository url
+        :param str workspace_ref: Git commit hash, branch name or tag
+        :param str workspace_username: Project git repository username
+        :param str workspace_password: Project git repository password
+        :param str project_id: Project ID
 
         :returns: Created deployment id
         :rtype: str
@@ -120,12 +130,17 @@ class DeploymentsClient(BaseClient):
             auth_username=auth_username,
             auth_password=auth_password,
             command=command,
+            workspace_url=workspace_url,
+            workspace_ref=workspace_ref,
+            workspace_username=workspace_username,
+            workspace_password=workspace_password,
+            project_id=project_id,
         )
 
         repository = self.build_repository(repositories.CreateDeployment)
         deployment_id = repository.create(deployment)
         if tags:
-            self.add_tags(entity_id=deployment_id, entity=self.entity, tags=tags)
+            self.add_tags(entity_id=deployment_id, tags=tags)
         return deployment_id
 
     def get(self, deployment_id):
@@ -212,6 +227,12 @@ class DeploymentsClient(BaseClient):
             cluster_id=None,
             auth_username=None,
             auth_password=None,
+            workspace_url=None,
+            workspace_ref=None,
+            workspace_username=None,
+            workspace_password=None,
+            project_id=None,
+            command=None,
     ):
         deployment = models.Deployment(
             deployment_type=deployment_type,
@@ -234,6 +255,12 @@ class DeploymentsClient(BaseClient):
             cluster_id=cluster_id,
             auth_username=auth_username,
             auth_password=auth_password,
+            workspace_url=workspace_url,
+            workspace_ref=workspace_ref,
+            workspace_username=workspace_username,
+            workspace_password=workspace_password,
+            project_id=project_id,
+            command=command,
         )
 
         repository = self.build_repository(repositories.UpdateDeployment)
@@ -285,7 +312,7 @@ class DeploymentsClient(BaseClient):
         )
         return metrics
 
-    def logs(self, deployment_id, line=1, limit=10000):
+    def logs(self, deployment_id, line=0, limit=10000):
         """Show list of latest logs from the specified deployment.
 
         :param str deployment_id: Deployment Id
@@ -300,7 +327,7 @@ class DeploymentsClient(BaseClient):
         logs = repository.list(id=deployment_id, line=line, limit=limit)
         return logs
 
-    def yield_logs(self, deployment_id, line=1, limit=10000):
+    def yield_logs(self, deployment_id, line=0, limit=10000):
         """Get log generator. Polls the API for new logs
 
         :param str deployment_id: Deployment Id

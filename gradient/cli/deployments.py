@@ -4,14 +4,25 @@ import click
 
 from gradient import cliutils
 from gradient import exceptions, clilogger, DEPLOYMENT_TYPES_MAP
-from gradient.api_sdk import constants
+from gradient.api_sdk import constants, workspace
+from gradient.api_sdk.s3_uploader import DeploymentWorkspaceDirectoryUploader
 from gradient.cli import common
 from gradient.cli.cli import cli
 from gradient.cli.cli_types import ChoiceType, json_string
 from gradient.cli.common import api_key_option, del_if_value_is_none, ClickGroup, validate_comma_split_option
+from gradient.cli_constants import CLI_PS_CLIENT_NAME
 from gradient.commands import deployments as deployments_commands
 from gradient.commands.deployments import DeploymentRemoveTagsCommand, DeploymentAddTagsCommand, \
     GetDeploymentMetricsCommand, StreamDeploymentMetricsCommand, DeploymentLogsCommand
+
+
+def get_workspace_handler(api_key):
+    logger_ = clilogger.CliLogger()
+    workspace_handler = workspace.S3WorkspaceHandlerWithProgressbar(api_key=api_key,
+                                                                    logger_=logger_,
+                                                                    uploader_cls=DeploymentWorkspaceDirectoryUploader,
+                                                                    client_name=CLI_PS_CLIENT_NAME)
+    return workspace_handler
 
 
 @cli.group("deployments", help="Manage deployments", cls=ClickGroup)
@@ -36,6 +47,12 @@ def deployments_metrics():
     type=ChoiceType(DEPLOYMENT_TYPES_MAP, case_sensitive=False),
     required=True,
     help="Model deployment type",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--projectId",
+    "project_id",
+    help="Project ID",
     cls=common.GradientOption,
 )
 @click.option(
@@ -110,12 +127,6 @@ def deployments_metrics():
     cls=common.GradientOption,
 )
 @click.option(
-    "--endpointUrlPath",
-    "endpoint_url_path",
-    help="Endpoint URL path",
-    cls=common.GradientOption,
-)
-@click.option(
     "--method",
     "method",
     help="Method",
@@ -185,13 +196,39 @@ def deployments_metrics():
     help="Separated by comma tags that you want add to model deployment job",
     cls=common.GradientOption
 )
+@click.option(
+    "--workspace",
+    "workspace",
+    help="Path to workspace directory, archive, S3 or git repository",
+    default="none",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceRef",
+    "workspace_ref",
+    help="Git commit hash, branch name or tag",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceUsername",
+    "workspace_username",
+    help="Workspace username",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspacePassword",
+    "workspace_password",
+    help="Workspace password",
+    cls=common.GradientOption,
+)
 @api_key_option
 @common.options_file
 def create_deployment(api_key, options_file, **kwargs):
     cliutils.validate_auth_options(kwargs)
     kwargs["tags"] = validate_comma_split_option(kwargs.pop("tags_comma"), kwargs.pop("tags"))
     del_if_value_is_none(kwargs)
-    command = deployments_commands.CreateDeploymentCommand(api_key=api_key)
+    command = deployments_commands.CreateDeploymentCommand(api_key=api_key,
+                                                           workspace_handler=get_workspace_handler(api_key))
     command.execute(**kwargs)
 
 
@@ -307,6 +344,12 @@ def delete_deployment(id_, options_file, api_key):
     cls=common.GradientOption,
 )
 @click.option(
+    "--projectId",
+    "project_id",
+    help="Project ID",
+    cls=common.GradientOption,
+)
+@click.option(
     "--modelId",
     "model_id",
     help="ID of a trained model",
@@ -338,6 +381,12 @@ def delete_deployment(id_, options_file, api_key):
     cls=common.GradientOption,
 )
 @click.option(
+    "--command",
+    "command",
+    help="Deployment command",
+    cls=common.GradientOption,
+)
+@click.option(
     "--containerModelPath",
     "container_model_path",
     help="Container model path",
@@ -365,12 +414,6 @@ def delete_deployment(id_, options_file, api_key):
     "--containerUrlPath",
     "container_url_path",
     help="Container URL path",
-    cls=common.GradientOption,
-)
-@click.option(
-    "--endpointUrlPath",
-    "endpoint_url_path",
-    help="Endpoint URL path",
     cls=common.GradientOption,
 )
 @click.option(
@@ -423,11 +466,38 @@ def delete_deployment(id_, options_file, api_key):
     help="Cluster ID",
     cls=common.GradientOption,
 )
+@click.option(
+    "--workspace",
+    "workspace",
+    help="Path to workspace directory, archive, S3 or git repository",
+    default="none",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceRef",
+    "workspace_ref",
+    help="Git commit hash, branch name or tag",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceUsername",
+    "workspace_username",
+    metavar="<username>",
+    help="Workspace username",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspacePassword",
+    "workspace_password",
+    help="Workspace password",
+    cls=common.GradientOption,
+)
 @api_key_option
 @common.options_file
 def update_deployment(deployment_id, api_key, options_file, **kwargs):
     del_if_value_is_none(kwargs)
-    command = deployments_commands.UpdateDeploymentCommand(api_key=api_key)
+    command = deployments_commands.UpdateDeploymentCommand(api_key=api_key,
+                                                           workspace_handler=get_workspace_handler(api_key))
     command.execute(deployment_id, **kwargs)
 
 

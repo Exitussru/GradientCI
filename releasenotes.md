@@ -1,11 +1,8 @@
 # Gradient CLI Release Notes
 
-# Release Notes for 0.7.1a0
+# Release Notes for 0.8.0a0
 #### New features
-* Added `deployments logs` command
-#### Fixes
-* Fix reading logs with `--follow true`
-* Fix creating job without workspace
+* Added `deployments logs` command for reading depoyment logs
 
 # Release Notes for 0.7.0
 ##### Note: this list includes all changes made in 0.7.0a* alpha releases
