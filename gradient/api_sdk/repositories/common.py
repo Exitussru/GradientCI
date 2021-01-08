@@ -7,7 +7,7 @@ import dateutil
 import six
 import websocket
 
-from .. import serializers
+from .. import serializers, sdk_exceptions
 from ..clients import http_client
 from ..config import config
 from ..sdk_exceptions import ResourceFetchingError, ResourceCreatingDataError, ResourceCreatingError, GradientSdkError
@@ -407,6 +407,8 @@ class StreamMetrics(BaseRepository):
                     yield data
             except websocket.WebSocketConnectionClosedException as e:
                 self.logger.debug("WebSocketConnectionClosedException: {}".format(e))
+            except sdk_exceptions.EndWebsocketStream:
+                return
 
     def _get_connection(self, kwargs):
         url = self._get_full_url(kwargs)
@@ -466,14 +468,12 @@ class ListLogs(ListResources):
     def get_request_url(self, **kwargs):
         return "/jobs/logs"
 
-    def yield_logs(self, id, line=0, limit=10000):
+    def yield_logs(self, id, line=1, limit=10000):
 
         gen = self._get_logs_generator(id, line, limit)
         return gen
 
     def _get_logs_generator(self, id, line, limit):
-        last_line_number = line
-
         while True:
             logs = self.list(id=id, line=line, limit=limit)
 
@@ -482,8 +482,8 @@ class ListLogs(ListResources):
                 if log.message == "PSEOF":
                     return
 
-                last_line_number += 1
                 yield log
+                line += 1
 
     def _parse_objects(self, log_rows, **kwargs):
         serializer = serializers.LogRowSchema()

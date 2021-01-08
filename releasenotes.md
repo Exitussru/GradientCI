@@ -1,8 +1,62 @@
 # Gradient CLI Release Notes
 
+# Release Notes for 0.9.0a0
+#### Fixes
+* Fixed reading logs with `--follow`. The bug caused all log lines in a loop instead of only the new one
+* Fixed `TypeError` occurring when a job was being created without `--workspace`
+### New features
+* Added whole directory upload to `models upload` command
+* Added a command group for managing `secrets`
+
+# Release Notes for 0.8.0
+##### Note: this list includes all changes made in 0.8.0a* alpha releases
+#### Breaking changes
+* Removed `entity` parameter from tag-related methods in clients 
+#### Fixes
+* Fix reading logs with `--follow true`
+* Fix creating job without workspace
+#### New features
+* Added `deployments logs` command for reading depoyment logs
+* Added `--command` option to `deployments update`
+* Added `--projectId` option to `deployments create` and `deployments update`
+* Added `gradient-utils` to required
+
+# Release Notes for 0.8.0a2
+#### Fixes
+* Fix reading logs with `--follow true`
+* Fix creating job without workspace
+
+# Release Notes for 0.7.1
+##### Note: this list includes all changes made in 0.7.1a* alpha releases
+#### New features
+* Added `deployments logs` command
+#### Fixes
+* Fix reading logs with `--follow true`
+* Fix creating job without workspace
+
+# Release Notes for 0.7.1a0
+#### New features
+* Added `deployments logs` command
+#### Fixes
+* Fix reading logs with `--follow true`
+* Fix creating job without workspace
+
+# Release Notes for 0.8.0a1
+#### Breaking changes
+* Removed `entity` parameter from tag-related methods in clients 
+#### New features
+* Added `--command` option to `deployments update`
+* Added `--projectId` option to `deployments create` and `deployments update`
+* Added `gradient-utils` to required
+
 # Release Notes for 0.8.0a0
 #### New features
 * Added `deployments logs` command for reading depoyment logs
+* Added `notebooks create` command for creating and starting a new notebook
+* Added `notebooks start` command for starting an existing notebook
+* Added `notebooks fork` command for forking a new notebook
+* Added `notebooks stop` command for stopping a running notebook
+* Added `notebooks artifacts list` command for listing the last workspace artifacts uploaded for a notebook.
 
 # Release Notes for 0.7.0
 ##### Note: this list includes all changes made in 0.7.0a* alpha releases
