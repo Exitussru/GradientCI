@@ -3,13 +3,13 @@ import collections
 import json
 import pydoc
 
-import click
 import six
 import terminaltables
+from click import style
 from halo import halo
 
 from gradient.clilogger import CliLogger
-from gradient.cliutils import get_terminal_lines
+from gradient.cliutils import get_terminal_lines, TerminalPrinter
 from gradient.exceptions import ApplicationError
 
 
@@ -93,6 +93,27 @@ class ListCommandMixin(object):
 
 
 @six.add_metaclass(abc.ABCMeta)
+class ListCommandPagerMixin(ListCommandMixin):
+    def _get_instances(self, kwargs):
+        limit = kwargs.get('limit') or 20
+        offset = 0
+
+        while True:
+            with halo.Halo(text=self.WAITING_FOR_RESPONSE_MESSAGE, spinner="dots"):
+                results = self.client.list(limit=limit + 1, offset=offset, **kwargs)
+            has_more = len(results) > limit
+            yield results[:limit], has_more
+            if not has_more:
+                break
+            offset += limit
+
+    def execute(self, **kwargs):
+        for instances, has_more in self._get_instances(kwargs):
+            self._log_objects_list(instances)
+            yield has_more
+
+
+@six.add_metaclass(abc.ABCMeta)
 class DetailsCommandMixin(object):
     WAITING_FOR_RESPONSE_MESSAGE = "Waiting for data..."
 
@@ -108,6 +129,9 @@ class DetailsCommandMixin(object):
         return instance
 
     def _log_object(self, instance):
+        if instance is None:
+            self.logger.warning("Not found")
+            return
 
         table_str = self._make_table(instance)
         if len(table_str.splitlines()) > get_terminal_lines():
@@ -131,6 +155,18 @@ class StreamMetricsCommand(ListCommandMixin):
         super(StreamMetricsCommand, self).__init__(*args, **kwargs)
         # {"metricName": {"pod_id": "value"}}
         self._recent_values = collections.OrderedDict()
+        self.terminal_printer = None
+
+    def execute(self, *args, **kwargs):
+        self.terminal_printer = TerminalPrinter()
+        self.terminal_printer.init()
+        try:
+            rv = super(StreamMetricsCommand, self).execute(*args, **kwargs)
+        finally:
+            self.terminal_printer.clear()
+            self.terminal_printer.cleanup()
+
+        return rv
 
     def _get_instances(self, kwargs):
         metrics_stream = self.client.stream_metrics(**kwargs)
@@ -154,8 +190,7 @@ class StreamMetricsCommand(ListCommandMixin):
             self._recent_values[metric_name][pod_name] = data["value"]
 
     def _print_table_to_terminal(self, table_str):
-        click.clear()
-        super(StreamMetricsCommand, self)._print_table_to_terminal(table_str)
+        self.terminal_printer.rewrite_screen(table_str)
 
     def _get_table_data(self, objects):
         metrics = list(self._recent_values.keys())
@@ -179,14 +214,6 @@ class StreamMetricsCommand(ListCommandMixin):
 
 
 class LogsCommandMixin(object):
-    @abc.abstractmethod
-    def _make_table(self, logs, id):
-        pass
-
-    @abc.abstractmethod
-    def _get_log_row_string(self, id, log):
-        pass
-
     def execute(self, id, line, limit, follow):
         if follow:
             self.logger.log("Awaiting logs...")
@@ -214,3 +241,22 @@ class LogsCommandMixin(object):
     def _get_logs_generator(self, id, line, limit):
         logs_gen = self.client.yield_logs(id, line, limit)
         return logs_gen
+
+    def _make_table(self, logs, id):
+        table_title = "%s %s logs" % (self.ENTITY, id)
+        table_data = [("LINE", "MESSAGE")]
+        table = terminaltables.AsciiTable(table_data, title=table_title)
+
+        for log in logs:
+            table_data.append(self._format_row(log))
+
+        return table.table
+
+    def _get_log_row_string(self, id, log):
+        log_msg = "{}\t{}".format(*self._format_row(log))
+        return log_msg
+
+    @staticmethod
+    def _format_row(log_row):
+        return (style(fg="red", text=str(log_row.line)),
+                log_row.message)

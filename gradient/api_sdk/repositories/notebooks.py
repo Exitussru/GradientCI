@@ -3,7 +3,7 @@ import json
 from ..clients import http_client
 from ..sdk_exceptions import ResourceCreatingError
 from .common import CreateResource, DeleteResource, ListResources, GetResource, \
-    StopResource, GetMetrics, StreamMetrics, BaseRepository
+    StopResource, GetMetrics, ListMetrics, StreamMetrics, BaseRepository, ListLogs
 from .. import config
 from .. import serializers, sdk_exceptions
 
@@ -37,8 +37,8 @@ class ForkNotebook(GetNotebookApiUrlMixin, BaseRepository):
     SERIALIZER_CLS = serializers.NotebookSchema
     VALIDATION_ERROR_MESSAGE = "Failed to fork notebook"
 
-    def fork(self, id):
-        instance = {"notebookId": id}
+    def fork(self, id_, project_id):
+        instance = {"notebookId": id_, "projectId": project_id}
         handle = self._send_request(instance)
         return handle
 
@@ -174,6 +174,20 @@ class GetNotebookMetrics(GetMetrics):
 
         return rv
 
+class ListNotebookMetrics(ListMetrics):
+    OBJECT_TYPE = "notebook"
+
+    def _get_instance_by_id(self, instance_id, **kwargs):
+        repository = GetNotebook(self.api_key, logger=self.logger, ps_client_name=self.ps_client_name)
+        instance = repository.get(id=instance_id)
+        return instance
+
+    def _get_start_date(self, instance, kwargs):
+        rv = super(ListNotebookMetrics, self)._get_start_date(instance, kwargs)
+        if rv is None:
+            raise sdk_exceptions.GradientSdkError("Notebook has not started yet")
+
+        return rv
 
 class StreamNotebookMetrics(StreamMetrics):
     OBJECT_TYPE = "notebook"
@@ -211,3 +225,12 @@ class ListNotebookArtifacts(GetNotebookApiUrlMixin, ListResources):
 
         return params
 
+class ListNotebookLogs(ListLogs):
+    def _get_request_params(self, kwargs):
+        params = {
+            "jobId": kwargs["job_id"],
+            "notebookId": kwargs["notebook_id"],
+            "line": kwargs["line"],
+            "limit": kwargs["limit"]
+        }
+        return params

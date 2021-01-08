@@ -11,7 +11,8 @@ from gradient import api_sdk, exceptions
 from gradient.api_sdk import sdk_exceptions
 from gradient.cli_constants import CLI_PS_CLIENT_NAME
 from gradient.cliutils import get_terminal_lines
-from gradient.commands.common import BaseCommand, ListCommandMixin, DetailsCommandMixin, StreamMetricsCommand
+from gradient.commands.common import BaseCommand, ListCommandMixin, DetailsCommandMixin, StreamMetricsCommand, \
+    LogsCommandMixin
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -68,9 +69,9 @@ class StartNotebookCommand(BaseNotebookCommand):
 class ForkNotebookCommand(BaseNotebookCommand):
     WAITING_FOR_RESPONSE_MESSAGE = "Forking notebook"
 
-    def execute(self, id_):
+    def execute(self, id_, project_id):
         with halo.Halo(text=self.WAITING_FOR_RESPONSE_MESSAGE, spinner="dots"):
-            handle = self.client.fork(id_)
+            handle = self.client.fork(id_, project_id)
 
         self.logger.log("Notebook forked to id: {}".format(handle))
 
@@ -119,6 +120,7 @@ class ShowNotebookDetailsCommand(DetailsCommandMixin, BaseNotebookCommand):
         data = (
             ("Name", instance.name),
             ("ID", instance.id),
+            ("Project", instance.project_handle),
             ("VM Type", instance.vm_type),
             ("State", instance.state),
             ("FQDN", instance.fqdn),
@@ -152,51 +154,20 @@ class GetNotebookMetricsCommand(BaseNotebookCommand):
         self.logger.log(formatted_metrics)
 
 
+class ListNotebookMetricsCommand(BaseNotebookCommand):
+    def execute(self, notebook_id, start, end, interval, *args, **kwargs):
+        metrics = self.client.list_metrics(
+            notebook_id,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+        formatted_metrics = json.dumps(metrics, indent=2, sort_keys=True)
+        self.logger.log(formatted_metrics)
+
+
 class StreamNotebookMetricsCommand(StreamMetricsCommand, BaseNotebookCommand):
     pass
-
-
-class NotebookLogsCommand(BaseNotebookCommand):
-
-    def execute(self, notebook_id, line, limit, follow):
-        if follow:
-            self.logger.log("Awaiting logs...")
-            self._log_logs_continuously(notebook_id, line, limit)
-        else:
-            self._log_table_of_logs(notebook_id, line, limit)
-
-    def _log_table_of_logs(self, notebook_id, line, limit):
-        logs = self.client.logs(notebook_id, line, limit)
-        if not logs:
-            self.logger.log("No logs found")
-            return
-
-        table_str = self._make_table(logs, notebook_id)
-        if len(table_str.splitlines()) > get_terminal_lines():
-            pydoc.pager(table_str)
-        else:
-            self.logger.log(table_str)
-
-    def _log_logs_continuously(self, notebook_id, line, limit):
-        logs_gen = self.client.yield_logs(notebook_id, line, limit)
-        for log in logs_gen:
-            log_msg = "{}\t{}".format(*self._format_row(log))
-            self.logger.log(log_msg)
-
-    @staticmethod
-    def _format_row(log_row):
-        return (style(fg="red", text=str(log_row.line)),
-                log_row.message)
-
-    def _make_table(self, logs, notebook_id):
-        table_title = "Notebook %s logs" % notebook_id
-        table_data = [("LINE", "MESSAGE")]
-        table = terminaltables.AsciiTable(table_data, title=table_title)
-
-        for log in logs:
-            table_data.append(self._format_row(log))
-
-        return table.table
 
 
 class ArtifactsListCommand(BaseNotebookCommand):
@@ -249,3 +220,7 @@ class ArtifactsListCommand(BaseNotebookCommand):
         ascii_table = terminaltables.AsciiTable(table_data)
         table_string = ascii_table.table
         return table_string
+
+
+class NotebookLogsCommand(LogsCommandMixin, BaseNotebookCommand):
+    ENTITY = "Notebook"

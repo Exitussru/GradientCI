@@ -32,7 +32,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
             name,
             machine_type,
             image_url,
-            instance_count,
+            instance_count=None,
             model_id=None,
             container_model_path=None,
             image_username=None,
@@ -55,6 +55,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
             workspace_username=None,
             workspace_password=None,
             project_id=None,
+            autoscaling=None,
     ):
         """
         Method to create a Deployment instance.
@@ -104,6 +105,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
         :param str workspace_username: Project git repository username
         :param str workspace_password: Project git repository password
         :param str project_id: Project ID
+        :param models.AutoscalingDefinition autoscaling: Deployment autoscaling definition
 
         :returns: Created deployment id
         :rtype: str
@@ -135,6 +137,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
             workspace_username=workspace_username,
             workspace_password=workspace_password,
             project_id=project_id,
+            autoscaling=autoscaling,
         )
 
         repository = self.build_repository(repositories.CreateDeployment)
@@ -233,6 +236,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
             workspace_password=None,
             project_id=None,
             command=None,
+            autoscaling=None,
     ):
         deployment = models.Deployment(
             deployment_type=deployment_type,
@@ -261,6 +265,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
             workspace_password=workspace_password,
             project_id=project_id,
             command=command,
+            autoscaling=autoscaling,
         )
 
         repository = self.build_repository(repositories.UpdateDeployment)
@@ -291,6 +296,27 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
         )
         return metrics
 
+    
+    def list_metrics(self, deployment_id, start=None, end=None, interval="30s"):
+        """List model deployment metrics
+
+        :param str deployment_id: ID of deployment
+        :param datetime.datetime|str start:
+        :param datetime.datetime|str end:
+        :param str interval:
+        :returns: Metrics of a model deployment job
+        :rtype: dict[str,dict[str,list[dict]]]
+        """
+
+        repository = self.build_repository(repositories.ListDeploymentMetrics)
+        metrics = repository.get(
+            id=deployment_id,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+        return metrics
+
     def stream_metrics(self, deployment_id, interval="30s", built_in_metrics=None):
         """Stream live model deployment metrics
 
@@ -312,7 +338,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
         )
         return metrics
 
-    def logs(self, deployment_id, line=0, limit=10000):
+    def logs(self, deployment_id, line=1, limit=10000):
         """Show list of latest logs from the specified deployment.
 
         :param str deployment_id: Deployment Id
@@ -327,7 +353,7 @@ class DeploymentsClient(TagsSupportMixin, BaseClient):
         logs = repository.list(id=deployment_id, line=line, limit=limit)
         return logs
 
-    def yield_logs(self, deployment_id, line=0, limit=10000):
+    def yield_logs(self, deployment_id, line=1, limit=10000):
         """Get log generator. Polls the API for new logs
 
         :param str deployment_id: Deployment Id

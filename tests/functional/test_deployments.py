@@ -29,7 +29,7 @@ def basic_options_metrics_stream_websocket_connection_iterator():
                "pod_metrics": {"desgffa3mtgepvm-0": {"time_stamp": 1587673820, "value": "34914304"},
                                "desgffa3mtgepvm-1": {"time_stamp": 1587673820, "value": "35942400"}}}"""
 
-        raise sdk_exceptions.GradientSdkError()
+        raise sdk_exceptions.EndWebsocketStream()
 
     return generator
 
@@ -53,7 +53,7 @@ def all_options_metrics_stream_websocket_connection_iterator():
                "pod_metrics": {"desgffa3mtgepvm-0": {"time_stamp": 1587640740, "value": "1234"},
                                "desgffa3mtgepvm-1": {"time_stamp": 1587640740, "value": "234"}}}"""
 
-        raise sdk_exceptions.GradientSdkError()
+        raise sdk_exceptions.EndWebsocketStream()
 
     return generator
 
@@ -145,6 +145,21 @@ class TestDeploymentsCreate(object):
         "--workspacePassword", "password",
     ]
     COMMAND_WITH_OPTIONS_FILE = ["deployments", "create", "--optionsFile", ]  # path added in test
+    BASIC_OPTIONS_COMMAND_WITH_AUTOSCALING = [
+        "deployments", "create",
+        "--deploymentType", "tfserving",
+        "--modelId", "some_model_id",
+        "--name", "some_name",
+        "--machineType", "G1",
+        "--imageUrl", "https://www.latlmes.com/breaking/paperspace-now-has-a-100-bilion-valuation",
+        "--instanceCount", "666",
+        "--minInstanceCount", "4",
+        "--maxInstanceCount", "64",
+        "--scaleCooldownPeriod", "123",
+        "--resource", "cpu/targetAverage:10",
+        "--metric", "loss/target:2.0",
+        "--metric", "keton/target:21.37",
+    ]
 
     BASIC_OPTIONS_REQUEST = {
         "machineType": u"G1",
@@ -195,15 +210,49 @@ class TestDeploymentsCreate(object):
         "workspacePassword": u"password",
         "projectId": "some_project_id",
     }
+    BASIC_OPTIONS_COMMAND_WITH_AUTOSCALING_REQUEST = {
+        "machineType": u"G1",
+        "name": u"some_name",
+        "imageUrl": u"https://www.latlmes.com/breaking/paperspace-now-has-a-100-bilion-valuation",
+        "deploymentType": "TFServing",
+        "instanceCount": 666,
+        "modelId": u"some_model_id",
+        "autoscaling": {
+            "minInstanceCount": 4,
+            "maxInstanceCount": 64,
+            "scaleCooldownPeriod": 123,
+            "metrics": [
+                {
+                    "type": "Resource",
+                    "name": "cpu",
+                    "valueType": "targetAverage",
+                    "value": 10,
+                },
+                {
+                    "type": "Metric",
+                    "name": "loss",
+                    "valueType": "target",
+                    "value": 2.0,
+                },
+                {
+                    "type": "Metric",
+                    "name": "keton",
+                    "valueType": "target",
+                    "value": 21.37,
+                },
+            ],
+        },
+    }
+
     RESPONSE_JSON_200 = example_responses.CREATE_DEPLOYMENT_WITH_BASIC_OPTIONS_RESPONSE
     UPDATE_TAGS_RESPONSE_JSON_200 = example_responses.UPDATE_TAGS_RESPONSE
     EXPECTED_STDOUT = "New deployment created with id: sadkfhlskdjh\n" \
-                      "https://www.paperspace.com/console/deployments/sadkfhlskdjh\n"
+                      "https://console.paperspace.com/deployments/sadkfhlskdjh\n"
 
     EXPECTED_STDOUT_WITH_WORKSPACE_ARCHIVING = "Archiving your working directory for upload as your experiment workspace..." \
                                                "(See https://docs.paperspace.com/gradient/experiments/run-experiments for more information.)\n" \
                                                "New deployment created with id: sadkfhlskdjh\n" \
-                                               "https://www.paperspace.com/console/deployments/sadkfhlskdjh\n"
+                                               "https://console.paperspace.com/deployments/sadkfhlskdjh\n"
 
     RESPONSE_JSON_404_MODEL_NOT_FOUND = {"error": {"name": "Error", "status": 404, "message": "Unable to find model"}}
     RESPONSE_CONTENT_404_MODEL_NOT_FOUND = b'{"error":{"name":"Error","status":404,"message":"Unable to find model"}}\n'
@@ -228,7 +277,7 @@ class TestDeploymentsCreate(object):
 
     @mock.patch("gradient.api_sdk.clients.http_client.requests.post")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
-    @mock.patch("gradient.api_sdk.workspace.utils.PathParser.parse_path")
+    @mock.patch("gradient.api_sdk.workspace.utils.PathParser.is_local_zip_file", return_value=True)
     @mock.patch("gradient.api_sdk.workspace.tempfile")
     @mock.patch("gradient.api_sdk.s3_uploader.S3FileUploader.upload")
     def test_should_send_proper_data_and_print_message_when_create_deployment_with_zipped_workspace_upload(self,
@@ -265,8 +314,6 @@ class TestDeploymentsCreate(object):
         post_patched.return_value = MockResponse(self.RESPONSE_JSON_200, 200, "fake content")
         get_patched.return_value = MockResponse(presigned_url_return_value, 200)
 
-        mock_parse_path.return_value = utils.PathParser.LOCAL_FILE
-
         mock_tempfile.gettempdir.return_value = archive_location
 
         post_params = self.BASIC_OPTIONS_REQUEST.copy()
@@ -295,17 +342,14 @@ class TestDeploymentsCreate(object):
                                             presigned_url)
         assert result.exit_code == 0
 
+    @mock.patch("gradient.api_sdk.workspace.utils.PathParser.parse_path", return_value=utils.PathParser.LOCAL_DIR)
     @mock.patch("gradient.api_sdk.clients.http_client.requests.post")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     @mock.patch("gradient.api_sdk.workspace.WorkspaceHandler._get_workspace_archiver")
     @mock.patch("gradient.api_sdk.workspace.tempfile")
     @mock.patch("gradient.api_sdk.s3_uploader.S3FileUploader.upload")
-    def test_should_send_proper_data_and_print_message_when_create_deployment_with_workspace_zipped_and_uploaded(self,
-                                                                                                                 mock_upload,
-                                                                                                                 mock_tempfile,
-                                                                                                                 mock_get_archiver,
-                                                                                                                 get_patched,
-                                                                                                                 post_patched):
+    def test_should_send_proper_data_and_print_message_when_create_deployment_with_workspace_zipped_and_uploaded(
+            self, mock_upload, mock_tempfile, mock_get_archiver, get_patched, post_patched, _):
         bucket_name = "some-bucket"
         team_handle = "thandle"
         archive_location = '/temp_foo'
@@ -472,6 +516,22 @@ class TestDeploymentsCreate(object):
             data=None,
         )
 
+        assert result.exit_code == 0
+
+    @mock.patch("gradient.api_sdk.clients.http_client.requests.post")
+    def test_should_send_autoscaling_options_with_metric_and_resource_requirements(self, post_patched):
+        post_patched.return_value = MockResponse(self.RESPONSE_JSON_200)
+
+        runner = CliRunner()
+        result = runner.invoke(cli.cli, self.BASIC_OPTIONS_COMMAND_WITH_AUTOSCALING)
+
+        assert result.output == self.EXPECTED_STDOUT, result.exc_info
+        post_patched.assert_called_once_with(self.URL,
+                                             headers=EXPECTED_HEADERS,
+                                             json=self.BASIC_OPTIONS_COMMAND_WITH_AUTOSCALING_REQUEST,
+                                             params=None,
+                                             files=None,
+                                             data=None)
         assert result.exit_code == 0
 
 
@@ -869,6 +929,12 @@ class TestDeploymentsUpdate(object):
         "--workspaceRef", "some_branch_name",
         "--workspaceUsername", "username",
         "--workspacePassword", "password",
+        "--minInstanceCount", "4",
+        "--maxInstanceCount", "64",
+        "--scaleCooldownPeriod", "123",
+        "--resource", "cpu/targetAverage:10",
+        "--metric", "loss/target:2.0",
+        "--metric", "keton/target:21.37",
     ]
     COMMAND_WITH_OPTIONS_FILE = ["deployments", "update", "--optionsFile", ]  # path added in test
 
@@ -906,6 +972,31 @@ class TestDeploymentsUpdate(object):
             "workspaceUsername": u"username",
             "workspacePassword": u"password",
             "projectId": "some_project_id",
+            "autoscaling": {
+                "minInstanceCount": 4,
+                "maxInstanceCount": 64,
+                "scaleCooldownPeriod": 123,
+                "metrics": [
+                    {
+                        "type": "Resource",
+                        "name": "cpu",
+                        "valueType": "targetAverage",
+                        "value": 10,
+                    },
+                    {
+                        "type": "Metric",
+                        "name": "loss",
+                        "valueType": "target",
+                        "value": 2.0,
+                    },
+                    {
+                        "type": "Metric",
+                        "name": "keton",
+                        "valueType": "target",
+                        "value": 21.37,
+                    },
+                ],
+            },
         }
     }
     RESPONSE_JSON_200 = example_responses.CREATE_DEPLOYMENT_WITH_BASIC_OPTIONS_RESPONSE
@@ -1020,22 +1111,28 @@ class TestDeploymentDetails(object):
         "statusCode": 404,
     }}
 
-    DETAILS_STDOUT = """+-----------------+-----------------------------------------------------+
-| ID              | some_id                                             |
-+-----------------+-----------------------------------------------------+
-| Name            | some_name                                           |
-| State           | Stopped                                             |
-| Machine type    | p3.2xlarge                                          |
-| Instance count  | 1                                                   |
-| Command         | some deployment command                             |
-| Deployment type | TFServing                                           |
-| Model ID        | some_model_id                                       |
-| Project ID      | some_project_id                                     |
-| Endpoint        | https://paperspace.io/model-serving/some_id:predict |
-| API type        | REST                                                |
-| Cluster ID      | some_cluster_id                                     |
-| Tags            | tag1, tag2                                          |
-+-----------------+-----------------------------------------------------+
+    DETAILS_STDOUT = """+-----------------------+-----------------------------------------------------+
+| ID                    | some_id                                             |
++-----------------------+-----------------------------------------------------+
+| Name                  | some_name                                           |
+| State                 | Stopped                                             |
+| Machine type          | p3.2xlarge                                          |
+| Instance count        | 1                                                   |
+| Command               | some deployment command                             |
+| Deployment type       | TFServing                                           |
+| Model ID              | some_model_id                                       |
+| Project ID            | some_project_id                                     |
+| Endpoint              | https://paperspace.io/model-serving/some_id:predict |
+| API type              | REST                                                |
+| Cluster ID            | some_cluster_id                                     |
+| Tags                  | tag1, tag2                                          |
+| Min Instance Count    | 4                                                   |
+| Max Instance Count    | 64                                                  |
+| Scale Cooldown Period | 123                                                 |
+| Autoscaling Metrics   | cpu/targetAverage:10.0                              |
+|                       | loss/target:2.0                                     |
+|                       | keton/target:21.37                                  |
++-----------------------+-----------------------------------------------------+
 """
 
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
@@ -1525,7 +1622,7 @@ class TestDeploymentsMetricsGetCommand(object):
         assert result.exit_code == 0, result.exc_info
 
 
-class TestExperimentsMetricsStreamCommand(object):
+class TestDeploymentssMetricsStreamCommand(object):
     LIST_DEPLOYMENTS_URL = "https://api.paperspace.io/deployments/getDeploymentList/"
     GET_METRICS_URL = "https://aws-testing.paperspace.io/metrics/api/v1/stream"
     BASIC_OPTIONS_COMMAND = [
@@ -1559,52 +1656,47 @@ class TestExperimentsMetricsStreamCommand(object):
 +-------------------+---------------+-------------+
 | desgffa3mtgepvm-0 |               | 34914304    |
 | desgffa3mtgepvm-1 |               | 35942400    |
-+-------------------+---------------+-------------+
-"""
++-------------------+---------------+-------------+"""
     EXPECTED_TABLE_2 = """+-------------------+----------------------+-------------+
 | Pod               | cpuPercentage        | memoryUsage |
 +-------------------+----------------------+-------------+
 | desgffa3mtgepvm-0 | 0.044894188888835944 | 34914304    |
 | desgffa3mtgepvm-1 | 0.048185748888916656 | 35942400    |
-+-------------------+----------------------+-------------+
-"""
++-------------------+----------------------+-------------+"""
     EXPECTED_TABLE_3 = """+-------------------+----------------------+-------------+
 | Pod               | cpuPercentage        | memoryUsage |
 +-------------------+----------------------+-------------+
 | desgffa3mtgepvm-0 | 0.044894188888835944 | 34914304    |
 | desgffa3mtgepvm-1 | 0.048185748888916656 | 35942400    |
-+-------------------+----------------------+-------------+
-"""
++-------------------+----------------------+-------------+"""
 
     ALL_OPTIONS_EXPECTED_TABLE_1 = """+-------------------+---------------+---------------+
 | Pod               | gpuMemoryFree | gpuMemoryUsed |
 +-------------------+---------------+---------------+
 | desgffa3mtgepvm-0 |               | 0             |
 | desgffa3mtgepvm-1 |               | 0             |
-+-------------------+---------------+---------------+
-"""
++-------------------+---------------+---------------+"""
     ALL_OPTIONS_EXPECTED_TABLE_2 = """+-------------------+---------------+---------------+
 | Pod               | gpuMemoryFree | gpuMemoryUsed |
 +-------------------+---------------+---------------+
 | desgffa3mtgepvm-0 |               | 321           |
 | desgffa3mtgepvm-1 |               | 432           |
-+-------------------+---------------+---------------+
-"""
++-------------------+---------------+---------------+"""
     ALL_OPTIONS_EXPECTED_TABLE_3 = """+-------------------+---------------+---------------+
 | Pod               | gpuMemoryFree | gpuMemoryUsed |
 +-------------------+---------------+---------------+
 | desgffa3mtgepvm-0 | 1234          | 321           |
 | desgffa3mtgepvm-1 | 234           | 432           |
-+-------------------+---------------+---------------+
-"""
++-------------------+---------------+---------------+"""
 
     EXPECTED_STDOUT_WHEN_INVALID_API_KEY_WAS_USED = "Failed to fetch data: Incorrect API Key provided\nForbidden\n"
     EXPECTED_STDOUT_WHEN_DEPLOYMENT_WAS_NOT_FOUND = "Deployment not found\n"
 
+    @mock.patch("gradient.commands.common.TerminalPrinter")
     @mock.patch("gradient.api_sdk.repositories.common.websocket.create_connection")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     def test_should_read_all_available_metrics_when_metrics_get_command_was_used_with_basic_options(
-            self, get_patched, create_ws_connection_patched,
+            self, get_patched, create_ws_connection_patched, terminal_printer_cls_patched,
             basic_options_metrics_stream_websocket_connection_iterator):
         get_patched.return_value = MockResponse(self.GET_LIST_OF_DEPLOYMENTS_RESPONSE_JSON)
 
@@ -1615,9 +1707,13 @@ class TestExperimentsMetricsStreamCommand(object):
         runner = CliRunner()
         result = runner.invoke(cli.cli, self.BASIC_OPTIONS_COMMAND)
 
-        assert self.EXPECTED_TABLE_1 in result.output, result.exc_info
-        assert self.EXPECTED_TABLE_2 in result.output, result.exc_info
-        assert self.EXPECTED_TABLE_3 in result.output, result.exc_info
+        terminal_printer_cls_patched().init.assert_called_once()
+        terminal_printer_cls_patched().rewrite_screen.assert_has_calls([
+            mock.call(self.EXPECTED_TABLE_1),
+            mock.call(self.EXPECTED_TABLE_2),
+            mock.call(self.EXPECTED_TABLE_3),
+        ])
+        terminal_printer_cls_patched().cleanup.assert_called_once()
 
         get_patched.assert_called_once_with(
             self.LIST_DEPLOYMENTS_URL,
@@ -1628,10 +1724,11 @@ class TestExperimentsMetricsStreamCommand(object):
         ws_connection_instance_mock.send.assert_called_once_with(self.BASIC_COMMAND_CHART_DESCRIPTOR)
         assert result.exit_code == 0, result.exc_info
 
+    @mock.patch("gradient.commands.common.TerminalPrinter")
     @mock.patch("gradient.api_sdk.repositories.common.websocket.create_connection")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     def test_should_read_metrics_when_metrics_get_command_was_used_with_all_options(
-            self, get_patched, create_ws_connection_patched,
+            self, get_patched, create_ws_connection_patched, terminal_printer_cls_patched,
             all_options_metrics_stream_websocket_connection_iterator):
         get_patched.return_value = MockResponse(self.GET_LIST_OF_DEPLOYMENTS_RESPONSE_JSON)
 
@@ -1642,9 +1739,13 @@ class TestExperimentsMetricsStreamCommand(object):
         runner = CliRunner()
         result = runner.invoke(cli.cli, self.ALL_OPTIONS_COMMAND)
 
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_1 in result.output, result.exc_info
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_2 in result.output, result.exc_info
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_3 in result.output, result.exc_info
+        terminal_printer_cls_patched().init.assert_called_once()
+        terminal_printer_cls_patched().rewrite_screen.assert_has_calls([
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_1),
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_2),
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_3),
+        ])
+        terminal_printer_cls_patched().cleanup.assert_called_once()
 
         get_patched.assert_called_once_with(
             self.LIST_DEPLOYMENTS_URL,
@@ -1656,10 +1757,11 @@ class TestExperimentsMetricsStreamCommand(object):
         ws_connection_instance_mock.send.assert_called_once_with(self.ALL_COMMANDS_CHART_DESCRIPTOR)
         assert result.exit_code == 0, result.exc_info
 
+    @mock.patch("gradient.commands.common.TerminalPrinter")
     @mock.patch("gradient.api_sdk.repositories.common.websocket.create_connection")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     def test_should_read_metrics_when_metrics_get_was_executed_and_options_file_was_used(
-            self, get_patched, create_ws_connection_patched,
+            self, get_patched, create_ws_connection_patched, terminal_printer_cls_patched,
             all_options_metrics_stream_websocket_connection_iterator,
             deployments_metrics_stream_config_path):
         get_patched.return_value = MockResponse(self.GET_LIST_OF_DEPLOYMENTS_RESPONSE_JSON)
@@ -1671,9 +1773,13 @@ class TestExperimentsMetricsStreamCommand(object):
         runner = CliRunner()
         result = runner.invoke(cli.cli, command)
 
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_1 in result.output, result.exc_info
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_2 in result.output, result.exc_info
-        assert self.ALL_OPTIONS_EXPECTED_TABLE_3 in result.output, result.exc_info
+        terminal_printer_cls_patched().init.assert_called_once()
+        terminal_printer_cls_patched().rewrite_screen.assert_has_calls([
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_1),
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_2),
+            mock.call(self.ALL_OPTIONS_EXPECTED_TABLE_3),
+        ])
+        terminal_printer_cls_patched().cleanup.assert_called_once()
 
         get_patched.assert_called_once_with(
             self.LIST_DEPLOYMENTS_URL,
@@ -1685,10 +1791,11 @@ class TestExperimentsMetricsStreamCommand(object):
         ws_connection_instance_mock.send.assert_called_once_with(self.ALL_COMMANDS_CHART_DESCRIPTOR)
         assert result.exit_code == 0, result.exc_info
 
+    @mock.patch("gradient.commands.common.TerminalPrinter")
     @mock.patch("gradient.api_sdk.repositories.common.websocket.create_connection")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     def test_should_print_valid_error_message_when_invalid_api_key_was_used(
-            self, get_patched, create_ws_connection_patched):
+            self, get_patched, create_ws_connection_patched, terminal_printer_cls_patched):
         get_patched.return_value = MockResponse({"status": 400, "message": "Invalid API token"}, 400)
 
         runner = CliRunner()
@@ -1706,10 +1813,11 @@ class TestExperimentsMetricsStreamCommand(object):
         create_ws_connection_patched.assert_not_called()
         assert result.exit_code == 0, result.exc_info
 
+    @mock.patch("gradient.commands.common.TerminalPrinter")
     @mock.patch("gradient.api_sdk.repositories.common.websocket.create_connection")
     @mock.patch("gradient.api_sdk.clients.http_client.requests.get")
     def test_should_print_valid_error_message_when_deployment_was_not_found(
-            self, get_patched, create_ws_connection_patched):
+            self, get_patched, create_ws_connection_patched, terminal_printer_cls_patched):
         get_patched.return_value = MockResponse({"deploymentList": []})
 
         runner = CliRunner()

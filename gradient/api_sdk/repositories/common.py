@@ -7,7 +7,7 @@ import dateutil
 import six
 import websocket
 
-from .. import serializers
+from .. import serializers, sdk_exceptions
 from ..clients import http_client
 from ..config import config
 from ..sdk_exceptions import ResourceFetchingError, ResourceCreatingDataError, ResourceCreatingError, GradientSdkError
@@ -377,6 +377,84 @@ class GetMetrics(GetResource):
         datetime_str = some_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
         return datetime_str
 
+class ListMetrics(GetResource):
+    OBJECT_TYPE = None
+
+    DEFAULT_INTERVAL = "30s"
+
+    @abc.abstractmethod
+    def _get_instance_by_id(self, instance_id, **kwargs):
+        pass
+
+    def _get_metrics_api_url(self, instance, protocol="https"):
+        if not instance.metrics_url:
+            raise GradientSdkError("Metrics API url not found")
+
+        metrics_api_url = concatenate_urls(protocol + "://", instance.metrics_url)
+        return metrics_api_url
+
+    def _get(self, **kwargs):
+        new_kwargs = self._get_kwargs(kwargs)
+        rv = super(ListMetrics, self)._get(**new_kwargs)
+        return rv
+
+    def _get_kwargs(self, kwargs):
+        instance_id = kwargs["id"]
+        instance = self._get_instance_by_id(instance_id)
+        started_date = self._get_start_date(instance, kwargs)
+        end = self._get_end_date(instance, kwargs)
+        interval = kwargs.get("interval") or self.DEFAULT_INTERVAL
+        metrics_api_url = self._get_metrics_api_url(instance)
+        new_kwargs = {
+            "start": started_date,
+            "interval": interval,
+            "objecttype": self.OBJECT_TYPE,
+            "handle": instance_id,
+            "metrics_api_url": metrics_api_url,
+        }
+        if end:
+            new_kwargs["end"] = end
+
+        return new_kwargs
+
+    def get_request_url(self, **kwargs):
+        return "metrics/api/v1/list"
+
+    def _get_api_url(self, **kwargs):
+        api_url = kwargs["metrics_api_url"]
+        return api_url
+
+    def _get_start_date(self, instance, kwargs):
+        datetime_string = kwargs.get("start") or instance.dt_started or instance.dt_created
+        if not datetime_string:
+            return None
+
+        datetime_string = self._format_datetime(datetime_string)
+        return datetime_string
+
+    def _get_end_date(self, instance, kwargs):
+        datetime_string = kwargs.get("end")
+        if not datetime_string:
+            return None
+
+        datetime_string = self._format_datetime(datetime_string)
+        return datetime_string
+
+    def _get_request_params(self, kwargs):
+        params = kwargs.copy()
+        params.pop("metrics_api_url", None)
+        return params
+
+    def _parse_object(self, instance_dict, **kwargs):
+        chart_names = instance_dict["chart_names"]
+        return chart_names
+
+    def _format_datetime(self, some_datetime):
+        if not isinstance(some_datetime, datetime.datetime):
+            some_datetime = dateutil.parser.parse(some_datetime)
+
+        datetime_str = some_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return datetime_str
 
 @six.add_metaclass(abc.ABCMeta)
 class StreamMetrics(BaseRepository):
@@ -407,6 +485,8 @@ class StreamMetrics(BaseRepository):
                     yield data
             except websocket.WebSocketConnectionClosedException as e:
                 self.logger.debug("WebSocketConnectionClosedException: {}".format(e))
+            except sdk_exceptions.EndWebsocketStream:
+                return
 
     def _get_connection(self, kwargs):
         url = self._get_full_url(kwargs)
@@ -454,7 +534,6 @@ class StreamMetrics(BaseRepository):
     def _get_stream_generator(self, connection):
         return connection
 
-
 class ListLogs(ListResources):
     @abc.abstractmethod
     def _get_request_params(self, kwargs):
@@ -466,14 +545,12 @@ class ListLogs(ListResources):
     def get_request_url(self, **kwargs):
         return "/jobs/logs"
 
-    def yield_logs(self, id, line=0, limit=10000):
+    def yield_logs(self, id, line=1, limit=10000):
 
         gen = self._get_logs_generator(id, line, limit)
         return gen
 
     def _get_logs_generator(self, id, line, limit):
-        last_line_number = line
-
         while True:
             logs = self.list(id=id, line=line, limit=limit)
 
@@ -482,8 +559,8 @@ class ListLogs(ListResources):
                 if log.message == "PSEOF":
                     return
 
-                last_line_number += 1
                 yield log
+                line += 1
 
     def _parse_objects(self, log_rows, **kwargs):
         serializer = serializers.LogRowSchema()

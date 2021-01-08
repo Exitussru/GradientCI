@@ -108,7 +108,7 @@ class BaseCreateExperimentCommandMixin(object):
         return experiment_id
 
     def get_instance_url(self, instance_id, project_id):
-        url = concatenate_urls(config.WEB_URL, "console/projects/{}/experiments/{}".format(project_id, instance_id))
+        url = concatenate_urls(config.WEB_URL, "projects/{}/experiments/{}".format(project_id, instance_id))
         return url
 
     def _handle_workspace(self, instance_dict):
@@ -118,7 +118,7 @@ class BaseCreateExperimentCommandMixin(object):
         instance_dict.pop("workspace", None)
         instance_dict.pop("workspace_archive", None)
         instance_dict.pop("workspace_url", None)
-        if handler and handler != "none":
+        if handler:
             instance_dict["workspace_url"] = handler
 
     def _maybe_add_to_tensorboard(self, tensorboard_id, experiment_id, api_key):
@@ -136,9 +136,11 @@ class BaseCreateExperimentCommandMixin(object):
         """Make list of dataset dicts"""
         datasets = [
             json_.pop("dataset_uri_list", ()),
+            json_.pop("dataset_id_list", ()),
             json_.pop("dataset_name_list", ()),
             json_.pop("dataset_access_key_id_list", ()),
             json_.pop("dataset_secret_access_key_list", ()),
+            json_.pop("dataset_endpoint_list", ()),
             json_.pop("dataset_version_id_list", ()),
             json_.pop("dataset_etag_list", ()),
             json_.pop("dataset_volume_kind_list", ()),
@@ -148,25 +150,27 @@ class BaseCreateExperimentCommandMixin(object):
         if not any(datasets):
             return
         else:
-            dataset_uri_len = len(datasets[0])
-            other_dataset_param_max_len = max(len(elem) for elem in datasets[1:])
-            if dataset_uri_len < other_dataset_param_max_len:
+            datasets_len = max(len(datasets[0]), len(datasets[1]))
+            other_dataset_param_max_len = max(len(elem) for elem in datasets[2:])
+            if datasets_len < other_dataset_param_max_len:
                 # there no point in defining n+1 dataset parameters of one type for n datasets
                 raise click.BadParameter(
                     "Too many dataset parameter sets ({}) for {} dataset URIs. Forgot to add one more dataset URI?"
-                        .format(other_dataset_param_max_len, dataset_uri_len))
+                        .format(other_dataset_param_max_len, datasets_len))
 
         datasets = [none_strings_to_none_objects(d) for d in datasets]
 
         datasets = zip_longest(*datasets, fillvalue=None)
         datasets = [{"uri": dataset[0],
-                     "name": dataset[1],
-                     "aws_access_key_id": dataset[2],
-                     "aws_secret_access_key": dataset[3],
-                     "version_id": dataset[4],
-                     "etag": dataset[5],
-                     "volume_kind": dataset[6],
-                     "volume_size": dataset[7],
+                     "id": dataset[1],
+                     "name": dataset[2],
+                     "aws_access_key_id": dataset[3],
+                     "aws_secret_access_key": dataset[4],
+                     "aws_endpoint": dataset[5],
+                     "version_id": dataset[6],
+                     "etag": dataset[7],
+                     "volume_kind": dataset[8],
+                     "volume_size": dataset[9],
                      } for dataset in datasets]
 
         json_["datasets"] = datasets
@@ -391,7 +395,7 @@ class ExperimentLogsCommand(LogsCommandMixin, BaseExperimentCommand):
     def _format_row(experiment_id, log_row):
         return (style(fg="blue", text=experiment_id),
                 style(fg="red", text=str(log_row.line)),
-                str(log_row.message).rstrip())
+                log_row.message)
 
 
 class DeleteExperimentCommand(BaseExperimentCommand):
@@ -424,6 +428,16 @@ class GetExperimentMetricsCommand(BaseExperimentCommand):
         formatted_metrics = json.dumps(metrics, indent=2, sort_keys=True)
         self.logger.log(formatted_metrics)
 
+class ListExperimentMetricsCommand(BaseExperimentCommand):
+    def execute(self, experiment_id, start, end, interval, *args, **kwargs):
+        metrics = self.client.list_metrics(
+            experiment_id,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+        formatted_metrics = json.dumps(metrics, indent=2, sort_keys=True)
+        self.logger.log(formatted_metrics)
 
 class StreamExperimentMetricsCommand(StreamMetricsCommand, BaseExperimentCommand):
     pass

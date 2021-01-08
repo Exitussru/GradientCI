@@ -7,37 +7,47 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
 
     def create(
             self,
-            cluster_id,
+            machine_type,
+            project_id=None,
+            cluster_id=None,
+            container=None,
             container_id=None,
-            vm_type_id=None,
-            vm_type_label=None,
-            container_name=None,
             name=None,
             registry_username=None,
             registry_password=None,
-            default_entrypoint=None,
+            command=None,
             container_user=None,
             shutdown_timeout=None,
             is_preemptible=None,
             is_public=None,
+            workspace=None,
+            workspace_ref=None,
+            workspace_username=None,
+            workspace_password=None,
             tags=None,
+            environment=None,
     ):
         """Create new notebook
 
+        :param str machine_type:
         :param int container_id:
+        :param str|int project_id:
         :param str cluster_id:
-        :param str vm_type_id:
-        :param int vm_type_label:
-        :param str container_name:
+        :param str container:
         :param str name:
         :param str registry_username:
         :param str registry_password:
-        :param str default_entrypoint:
+        :param str command:
         :param str container_user:
         :param int shutdown_timeout:
         :param bool is_preemptible:
         :param bool is_public:
         :param list[str] tags: List of tags
+        :param str workspace: Project git repository url
+        :param str workspace_ref: Git commit hash, branch name or tag
+        :param str workspace_username: Project git repository username
+        :param str workspace_password: Project git repository password
+        :param dict environment: key value collection of envs that are used in notebook
 
         :return: Notebook ID
         :rtype str:
@@ -45,18 +55,23 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
 
         notebook = models.Notebook(
             container_id=container_id,
+            project_id=project_id,
             cluster_id=cluster_id,
-            container_name=container_name,
+            container=container,
             name=name,
             registry_username=registry_username,
             registry_password=registry_password,
-            default_entrypoint=default_entrypoint,
+            command=command,
             container_user=container_user,
             shutdown_timeout=shutdown_timeout,
             is_preemptible=is_preemptible,
-            vm_type_label=vm_type_label,
-            vm_type_id=vm_type_id,
+            machine_type=machine_type,
             is_public=is_public,
+            environment=environment,
+            workspace=workspace,
+            workspace_username=workspace_username,
+            workspace_password=workspace_password,
+            workspace_ref=workspace_ref,
         )
 
         repository = self.build_repository(repositories.CreateNotebook)
@@ -70,9 +85,8 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
     def start(
             self,
             id,
-            cluster_id,
-            vm_type_id=None,
-            vm_type_label=None,
+            machine_type,
+            cluster_id=None,
             name=None,
             shutdown_timeout=None,
             is_preemptible=None,
@@ -80,9 +94,8 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
     ):
         """Start existing notebook
         :param str|int id:
+        :param str machine_type:
         :param str cluster_id:
-        :param str vm_type_id:
-        :param int vm_type_label:
         :param str name:
         :param int shutdown_timeout:
         :param bool is_preemptible:
@@ -93,8 +106,7 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
         """
         notebook = models.NotebookStart(
             notebook_id=id,
-            vm_type_id=vm_type_id,
-            vm_type_label=vm_type_label,
+            machine_type=machine_type,
             cluster_id=cluster_id,
             notebook_name=name,
             shutdown_timeout=shutdown_timeout,
@@ -110,16 +122,17 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
 
         return handle
 
-    def fork(self, id, tags=None):
+    def fork(self, id, project_id, tags=None):
         """Fork an existing notebook
         :param str|int id:
+        :param str project_id:
         :param list[str] tags: List of tags
 
         :return: Notebook ID
         :rtype str:
         """
         repository = self.build_repository(repositories.ForkNotebook)
-        handle = repository.fork(id)
+        handle = repository.fork(id, project_id)
 
         if tags:
             self.add_tags(entity_id=handle, tags=tags)
@@ -178,6 +191,26 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
         )
         return metrics
 
+    def list_metrics(self, notebook_id, start=None, end=None, interval="30s"):
+        """List notebook metrics
+
+        :param str notebook_id: notebook ID
+        :param datetime.datetime|str start:
+        :param datetime.datetime|str end:
+        :param str interval:
+        :returns: Metrics of a notebook
+        :rtype: dict[str,dict[str,list[dict]]]
+        """
+
+        repository = self.build_repository(repositories.ListNotebookMetrics)
+        metrics = repository.get(
+            id=notebook_id,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+        return metrics
+
     def stream_metrics(self, notebook_id, interval="30s", built_in_metrics=None):
         """Stream live notebook metrics
 
@@ -233,3 +266,55 @@ class NotebooksClient(TagsSupportMixin, BaseClient):
         repository = self.build_repository(repositories.ListNotebookArtifacts)
         artifacts = repository.list(notebook_id=notebook_id, files=files, links=links, size=size)
         return artifacts
+
+    def logs(self, notebook_id, line=1, limit=10000):
+        """
+        Method to retrieve notebook logs.
+
+        .. code-block:: python
+            :linenos:
+            :emphasize-lines: 2
+
+            notebook_logs = notebook_client.logs(
+                notebook_id='Your_job_id_here',
+                line=100,
+                limit=100
+            )
+
+        :param str notebook_id: id of notebook that we want to retrieve logs
+        :param int line: from what line you want to retrieve logs. Default 0
+        :param int limit: how much lines you want to retrieve logs. Default 10000
+
+        :returns: list of formatted logs lines
+        :rtype: list
+        """
+        notebook = self.get(notebook_id)
+        repository = self.build_repository(repositories.ListNotebookLogs)
+        logs = repository.list(job_id=notebook.job_handle, notebook_id=notebook_id, line=line, limit=limit)
+        return logs
+
+    def yield_logs(self, notebook_id, line=1, limit=10000):
+        """Get log generator. Polls the API for new logs
+
+        .. code-block:: python
+            :linenos:
+            :emphasize-lines: 2
+
+            notebook_logs_generator = notebook_client.yield_logs(
+                notebook_id='Your_job_id_here',
+                line=100,
+                limit=100
+            )
+
+        :param str notebook_id:
+        :param int line: line number at which logs starts to display on screen
+        :param int limit: maximum lines displayed on screen, default set to 10 000
+
+        :returns: generator yielding LogRow instances
+        :rtype: Iterator[models.LogRow]
+        """
+
+        notebook = self.get(notebook_id)
+        repository = self.build_repository(repositories.ListNotebookLogs)
+        logs = repository.yield_logs(job_id=notebook.job_handle, notebook_id=notebook_id, line=line, limit=limit)
+        return logs

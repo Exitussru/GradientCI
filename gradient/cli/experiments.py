@@ -13,7 +13,7 @@ from gradient.cli.utils.flag_with_value import GradientRegisterReaderOption, Gra
 from gradient.cli_constants import CLI_PS_CLIENT_NAME
 from gradient.commands import experiments as experiments_commands
 from gradient.commands.experiments import ExperimentAddTagsCommand, ExperimentRemoveTagsCommand, \
-    GetExperimentMetricsCommand, StreamExperimentMetricsCommand
+    GetExperimentMetricsCommand, ListExperimentMetricsCommand, StreamExperimentMetricsCommand
 
 MULTI_NODE_CREATE_EXPERIMENT_COMMANDS = {
     constants.ExperimentType.GRPC_MULTI_NODE: experiments_commands.CreateMultiNodeExperimentCommand,
@@ -75,7 +75,6 @@ def common_experiments_create_options(f):
                 "--workspace",
                 "workspace",
                 help="Path to workspace directory, archive, S3 or git repository",
-                default="none",
                 cls=common.GradientOption,
             ),
             click.option(
@@ -179,6 +178,14 @@ def common_experiments_create_options(f):
 def dataset_options(f):
     options = [
         click.option(
+            "--datasetId",
+            "dataset_id_list",
+            metavar="<dateset id>",
+            multiple=True,
+            help="Dataset ID",
+            cls=common.GradientDatasetOption,
+        ),
+        click.option(
             "--datasetUri",
             "dataset_uri_list",
             metavar="<dateset uri>",
@@ -207,6 +214,13 @@ def dataset_options(f):
             "dataset_secret_access_key_list",
             multiple=True,
             help="S3 bucket's Secret Access Key",
+            cls=common.GradientDatasetOption,
+        ),
+        click.option(
+            "--datasetAwsEndpoint",
+            "dataset_endpoint_list",
+            multiple=True,
+            help="S3 endpoint URL",
             cls=common.GradientDatasetOption,
         ),
         click.option(
@@ -586,7 +600,7 @@ def create_and_start_multi_node(ctx, api_key, show_logs, tensorboard, tensorboar
     )
     experiment_id = command.execute(kwargs, add_to_tensorboard=add_to_tensorboard)
     if experiment_id and show_logs:
-        ctx.invoke(list_logs, experiment_id=experiment_id, line=0, limit=100, follow=True, api_key=api_key)
+        ctx.invoke(list_logs, experiment_id=experiment_id, line=1, limit=100, follow=True, api_key=api_key)
 
 
 @create_and_start_experiment.command(name="singlenode", help="Create and start new single node experiment",
@@ -619,7 +633,7 @@ def create_and_start_single_node(ctx, api_key, show_logs, tensorboard, tensorboa
     )
     experiment_id = command.execute(kwargs, add_to_tensorboard=add_to_tensorboard)
     if experiment_id and show_logs:
-        ctx.invoke(list_logs, experiment_id=experiment_id, line=0, limit=100, follow=True, api_key=api_key)
+        ctx.invoke(list_logs, experiment_id=experiment_id, line=1, limit=100, follow=True, api_key=api_key)
 
 
 @experiments_group.command("start", help="Start experiment")
@@ -644,7 +658,7 @@ def start_experiment(ctx, id, show_logs, api_key, options_file):
     command.execute(id)
 
     if show_logs:
-        ctx.invoke(list_logs, experiment_id=id, line=0, limit=100, follow=True, api_key=api_key)
+        ctx.invoke(list_logs, experiment_id=id, line=1, limit=100, follow=True, api_key=api_key)
 
 
 @experiments_group.command("stop", help="Stop experiment")
@@ -847,9 +861,9 @@ def experiment_remove_tags(id, options_file, api_key, **kwargs):
     "--metric",
     "metrics_list",
     multiple=True,
-    type=ChoiceType(constants.METRICS_MAP, case_sensitive=False),
+    type=str,
     default=(constants.BuiltinMetrics.cpu_percentage, constants.BuiltinMetrics.memory_usage),
-    help="One or more metrics that you want to read. Defaults to cpuPercentage and memoryUsage",
+    help=("One or more metrics that you want to read: {}. Defaults to cpuPercentage and memoryUsage. To view available custom metrics, use command: `gradient experiments metrics list`".format(', '.join(map(str, constants.METRICS_MAP)))),
     cls=common.GradientOption,
 )
 @click.option(
@@ -878,6 +892,46 @@ def experiment_remove_tags(id, options_file, api_key, **kwargs):
 def get_experiment_metrics(experiment_id, metrics_list, interval, start, end, options_file, api_key):
     command = GetExperimentMetricsCommand(api_key=api_key)
     command.execute(experiment_id, start, end, interval, built_in_metrics=metrics_list)
+
+
+@experiments_metrics.command(
+    "list",
+    short_help="List experiment metrics",
+    help="List experiment metrics. Shows CPU and RAM usage by default",
+)
+@click.option(
+    "--id",
+    "experiment_id",
+    required=True,
+    cls=common.GradientOption,
+    help="ID of the experiment",
+)
+@click.option(
+    "--interval",
+    "interval",
+    default="30s",
+    help="Interval",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--start",
+    "start",
+    type=click.DateTime(),
+    help="Timestamp of first time series metric to collect",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--end",
+    "end",
+    type=click.DateTime(),
+    help="Timestamp of last time series metric to collect",
+    cls=common.GradientOption,
+)
+@api_key_option
+@common.options_file
+def list_experiment_metrics(experiment_id, interval, start, end, options_file, api_key):
+    command = ListExperimentMetricsCommand(api_key=api_key)
+    command.execute(experiment_id, start, end, interval)
 
 
 @experiments_metrics.command(

@@ -1,19 +1,43 @@
 version: 2.1
+
+orbs:
+  release-tools: paperspace/release-tools@0.1.1
+
 workflows:
-  build_and_deploy:
+  master:
     jobs:
       - test:
           filters:
+            branches:
+              only: master
             tags:
               only: /.*/
-      - deploy:
+      - release-tools/release:
+          name: create release
+          context: semantic-release
+          workspace: /root/gradient-cli
           requires:
             - test
+          filters:
+            branches:
+              only: master
+
+  pr:
+    jobs:
+      - test:
+          filters:
+            branches:
+              ignore: master
+
+  release:
+    jobs:
+      - deploy:
           filters:
             tags:
               only: /.*/
             branches:
               ignore: /.*/
+
 executors:
   python-tox:
     docker:
@@ -36,6 +60,11 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Make version.py
+          command: |
+            echo "Publishing version $CIRCLE_TAG"
+            echo "version = \"${CIRCLE_TAG}\"" > gradient/version.py
+      - run:
           name: import GPG key
           command: |
             export GPG_TTY=$(tty)
@@ -45,7 +74,7 @@ jobs:
           command: |
             make pip-install-dev
       - run:
-          name: verify git tag vs. version
+          name: verify version is valid
           command: |
             python setup.py verify
       - run:

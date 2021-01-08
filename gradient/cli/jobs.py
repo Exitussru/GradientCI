@@ -13,7 +13,7 @@ from gradient.cli.common import (
 )
 from gradient.commands import jobs as jobs_commands
 from gradient.commands.jobs import JobAddTagsCommand, JobRemoveTagsCommand, StreamJobMetricsCommand, \
-    GetJobMetricsCommand
+    GetJobMetricsCommand, ListJobMetricsCommand
 from gradient.api_sdk.workspace import WorkspaceHandler
 
 
@@ -166,10 +166,10 @@ def common_jobs_create_options(f):
             cls=common.GradientOption,
         ),
         click.option(
-            "--jobEnv",
-            "job_env",
+            "--envVars",
+            "env_vars",
             type=json_string,
-            help="Environmental variables ",
+            help="Environmental variables",
             cls=common.GradientOption,
         ),
         click.option(
@@ -279,6 +279,13 @@ def common_jobs_create_options(f):
             "tags_comma",
             help="Separated by comma tags that you want add to experiment",
             cls=common.GradientOption
+        ),
+        click.option(
+            "--dataset",
+            "datasets",
+            help="Separated by comma tags that you want add to experiment",
+            cls=common.GradientOption,
+            multiple=True,
         )
     ]
     return reduce(lambda x, opt: opt(x), reversed(options), f)
@@ -289,16 +296,35 @@ def common_jobs_create_options(f):
 @api_key_option
 @common.options_file
 @click.pass_context
-def create_job(ctx, api_key, options_file, **kwargs):
+def create_job(ctx, api_key, options_file, datasets=None, **kwargs):
     kwargs["tags"] = validate_comma_split_option(kwargs.pop("tags_comma"), kwargs.pop("tags"))
 
     del_if_value_is_none(kwargs)
     jsonify_dicts(kwargs)
 
+    if datasets:
+        values = []
+
+        for value in datasets:
+            name, _, ref = value.partition("@")
+            if not (name and ref):
+                raise click.UsageError(
+                    "Dataset '%s' must have an @ (ex: images@dsr8k5qzn401lb5:klfoyy9)" % value)
+
+            dataset = {"id": ref, "name": name}
+            if ":" not in ref:
+                dataset["output"] = True
+
+            values.append(dataset)
+
+        kwargs["datasets"] = values
+
+
+
     command = jobs_commands.CreateJobCommand(api_key=api_key, workspace_handler=get_workspace_handler())
     job_handle = command.execute(kwargs)
     if job_handle is not None:
-        ctx.invoke(list_logs, job_id=job_handle, line=0, limit=100, follow=True, api_key=api_key)
+        ctx.invoke(list_logs, job_id=job_handle, line=1, limit=100, follow=True, api_key=api_key)
 
 
 @jobs_group.command("logs", help="List job logs")
@@ -420,6 +446,7 @@ def list_artifacts(job_id, size, links, files, options_file, api_key=None):
 @click.option(
     "--destinationDir",
     "destination_directory",
+    required=True,
     cls=common.GradientOption,
 )
 @api_key_option
@@ -506,9 +533,9 @@ def job_remove_tags(id, options_file, api_key, **kwargs):
     "--metric",
     "metrics_list",
     multiple=True,
-    type=ChoiceType(constants.METRICS_MAP, case_sensitive=False),
+    type=str,
     default=(constants.BuiltinMetrics.cpu_percentage, constants.BuiltinMetrics.memory_usage),
-    help="One or more metrics that you want to read. Defaults to cpuPercentage and memoryUsage",
+    help=("One or more metrics that you want to read: {}. Defaults to cpuPercentage and memoryUsage. To view available custom metrics, use command: `gradient jobs metrics list`".format(', '.join(map(str, constants.METRICS_MAP)))),
     cls=common.GradientOption,
 )
 @click.option(
@@ -538,6 +565,44 @@ def get_job_metrics(job_id, metrics_list, interval, start, end, options_file, ap
     command = GetJobMetricsCommand(api_key=api_key)
     command.execute(job_id, start, end, interval, built_in_metrics=metrics_list)
 
+@jobs_metrics.command(
+    "list",
+    short_help="List job metrics",
+    help="List job metrics. Shows CPU and RAM usage by default",
+)
+@click.option(
+    "--id",
+    "job_id",
+    required=True,
+    cls=common.GradientOption,
+    help="ID of the job",
+)
+@click.option(
+    "--interval",
+    "interval",
+    default="30s",
+    help="Interval",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--start",
+    "start",
+    type=click.DateTime(),
+    help="Timestamp of first time series metric to collect",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--end",
+    "end",
+    type=click.DateTime(),
+    help="Timestamp of last time series metric to collect",
+    cls=common.GradientOption,
+)
+@api_key_option
+@common.options_file
+def list_job_metrics(job_id, interval, start, end, options_file, api_key):
+    command = ListJobMetricsCommand(api_key=api_key)
+    command.execute(job_id, start, end, interval)
 
 @jobs_metrics.command(
     "stream",

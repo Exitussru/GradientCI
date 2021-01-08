@@ -48,7 +48,7 @@ class ExperimentsClient(TagsSupportMixin, utils.ExperimentsClientHelpersMixin, B
         :param str workspace_username: Project git repository username
         :param str workspace_password: Project git repository password
         :param dict|list[dict]|tuple[dict] datasets: Dict or list of dicts describing dataset(s) used in experiment.
-                                                     Required keys: "url"
+                                                     Required keys: "id" or "url"
                                                      Optional keys: "tag" for S3 tag and "auth" for S3 token
         :param str working_directory: Working directory for the experiment
         :param str artifact_directory: Artifacts directory
@@ -766,7 +766,7 @@ class ExperimentsClient(TagsSupportMixin, utils.ExperimentsClientHelpersMixin, B
         experiment = repository.get(experiment_id=experiment_id)
         return experiment
 
-    def logs(self, experiment_id, line=0, limit=10000):
+    def logs(self, experiment_id, line=1, limit=10000):
         """Show list of latest logs from the specified experiment.
 
         :param str experiment_id: Experiment ID
@@ -781,7 +781,7 @@ class ExperimentsClient(TagsSupportMixin, utils.ExperimentsClientHelpersMixin, B
         logs = repository.list(id=experiment_id, line=line, limit=limit)
         return logs
 
-    def yield_logs(self, experiment_id, line=0, limit=10000):
+    def yield_logs(self, experiment_id, line=1, limit=10000):
         """Get log generator. Polls the API for new logs
 
         :param str experiment_id:
@@ -831,6 +831,27 @@ class ExperimentsClient(TagsSupportMixin, utils.ExperimentsClientHelpersMixin, B
         )
         return metrics
 
+    def list_metrics(self, experiment_id, start=None, end=None, interval="30s"):
+        """List experiment metrics
+
+        :param str experiment_id: ID of experiment
+        :param datetime.datetime|str start:
+        :param datetime.datetime|str end:
+        :param str interval:
+        :returns: Metrics of and experiment
+        :rtype: dict[str,dict[str,list[dict]]]
+        """
+
+        repository = self.build_repository(repositories.ListExperimentMetrics)
+        metrics = repository.get(
+            id=experiment_id,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+        return metrics
+
+
     def stream_metrics(self, experiment_id, interval="30s", built_in_metrics=None):
         """Stream live experiment metrics
 
@@ -860,14 +881,14 @@ class ExperimentsClient(TagsSupportMixin, utils.ExperimentsClientHelpersMixin, B
             datasets = [datasets]
 
         for ds in datasets:
-            if not ds.get("uri"):
+            if not (ds.get("id") or ds.get("uri")):
                 raise ResourceCreatingDataError("Error while creating experiment with dataset: "
-                                                "\"uri\" key is required and it's value must be a valid S3 URI")
+                                                'id or uri key is required')
 
         for ds in datasets:
             volume_options = ds.setdefault("volume_options", {})
             volume_options.setdefault("kind", ds.pop("volume_kind", None))
             volume_options.setdefault("size", ds.pop("volume_size", None))
 
-        datasets = [models.Dataset(**ds) for ds in datasets]
+        datasets = [models.ExperimentDataset(**ds) for ds in datasets]
         return datasets

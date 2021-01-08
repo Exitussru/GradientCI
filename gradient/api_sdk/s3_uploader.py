@@ -193,7 +193,7 @@ class S3ModelFileUploader(object):
             multipart_encoder_cls=self.multipart_encoder_cls
         )
 
-    def upload(self, file_path, model_id):
+    def upload(self, file_path, model_id, cluster_id=None):
         """Upload file to S3 bucket for a project
 
         :param str file_path:
@@ -202,11 +202,11 @@ class S3ModelFileUploader(object):
         :rtype: str
         :return: S3 bucket's URL
         """
-        url = self._get_upload_data(file_path, model_id)
+        url = self._get_upload_data(file_path, model_id, cluster_id=cluster_id)
         self.s3uploader.upload(file_path, url)
         return url
 
-    def _get_upload_data(self, file_path, model_id):
+    def _get_upload_data(self, file_path, model_id, cluster_id=None):
         """Ask API for data required to upload a file to S3
 
         :param str file_path:
@@ -221,6 +221,8 @@ class S3ModelFileUploader(object):
             "modelHandle": model_id,
             "contentType": mimetypes.guess_type(file_path)[0] or "",
         }
+        if cluster_id:
+            params["clusterId"] = cluster_id
 
         response = self.ps_api_client.get("/mlModels/getPresignedModelUrl", params=params)
         if not response.ok:
@@ -236,6 +238,28 @@ class S3ModelFileUploader(object):
     def _get_client(self, url, ps_client_name=None, api_key=None):
         client = http_client.API(url, logger=self.logger, ps_client_name=ps_client_name, api_key=api_key)
         return client
+
+
+class S3ModelUploader(S3ModelFileUploader):
+    def upload(self, file_path, model_id, cluster_id=None):
+        if os.path.isdir(file_path):
+            file_path = self._zip_model_directory(file_path)
+
+        return super(S3ModelUploader, self).upload(file_path, model_id, cluster_id=cluster_id)
+
+    def _zip_model_directory(self, dir_path):
+        archiver = self._get_archiver()
+        archive_path = self._get_archive_path()
+        archiver.archive(dir_path, archive_path)
+        return archive_path
+
+    def _get_archiver(self):
+        return ZipArchiver()
+
+    def _get_archive_path(self):
+        archive_file_name = 'model.zip'
+        archive_file_path = os.path.join(tempfile.gettempdir(), archive_file_name)
+        return archive_file_path
 
 
 class ExperimentWorkspaceDirectoryUploader(object):
@@ -283,7 +307,7 @@ class DeploymentWorkspaceDirectoryUploader(object):
     def __init__(self, api_key, uploader=None, logger=None, ps_client_name=None):
         """
         :param str api_key:
-        :param S3FileUploader uploader:
+        :param S3PutFileUploader uploader:
         :param Logger logger:
         """
         self.logger = logger or MuteLogger()
@@ -293,13 +317,14 @@ class DeploymentWorkspaceDirectoryUploader(object):
             logger=self.logger,
             ps_client_name=ps_client_name,
         )
-        self.uploader = uploader or S3PutFileUploader(logger=self.logger, ps_client_name=ps_client_name)
+        self.uploader = S3PutFileUploader(logger=self.logger, ps_client_name=ps_client_name)
 
-    def _get_upload_data(self, file_path, project_id):
+    def _get_upload_data(self, file_path, project_id, cluster_id=None):
         """Ask API for data required to upload deployment workspace a file to S3
 
         :param str file_path:
         :param str project_id:
+        :param str cluster_id:
 
         :rtype: str
         :return: URL to which send the file, name of the bucket and a dictionary required by S3 service
@@ -311,6 +336,8 @@ class DeploymentWorkspaceDirectoryUploader(object):
         }
         if project_id:
             params['projectId'] = project_id
+        if cluster_id:
+            params['clusterHandle'] = cluster_id
         response = self.ps_api_client.get("/deployments/getPresignedDeploymentUrl", params=params)
         if not response.ok:
             raise sdk_exceptions.PresignedUrlConnectionError(response.reason)
@@ -325,15 +352,16 @@ class DeploymentWorkspaceDirectoryUploader(object):
 
         return presigned_url, bucket_name, workspace_url
 
-    def upload(self, file_path, project_id=None, **kwargs):
+    def upload(self, file_path, project_id=None, cluster_id=None, **kwargs):
         """Upload file to S3 bucket for a project
 
         :param str file_path:
         :param str project_id:
+        :param str cluster_id:
 
         :rtype: str
         :return: S3 bucket's URL
         """
-        url, bucket_name, workspace_url = self._get_upload_data(file_path, project_id)
+        url, bucket_name, workspace_url = self._get_upload_data(file_path, project_id, cluster_id)
         self.uploader.upload(file_path, url)
         return workspace_url

@@ -13,7 +13,7 @@ from gradient.cli.common import api_key_option, del_if_value_is_none, ClickGroup
 from gradient.cli_constants import CLI_PS_CLIENT_NAME
 from gradient.commands import deployments as deployments_commands
 from gradient.commands.deployments import DeploymentRemoveTagsCommand, DeploymentAddTagsCommand, \
-    GetDeploymentMetricsCommand, StreamDeploymentMetricsCommand, DeploymentLogsCommand
+    GetDeploymentMetricsCommand, ListDeploymentMetricsCommand, StreamDeploymentMetricsCommand, DeploymentLogsCommand
 
 
 def get_workspace_handler(api_key):
@@ -23,6 +23,52 @@ def get_workspace_handler(api_key):
                                                                     uploader_cls=DeploymentWorkspaceDirectoryUploader,
                                                                     client_name=CLI_PS_CLIENT_NAME)
     return workspace_handler
+
+
+def validate_autoscaling_metric_or_resource(ctx, param, value, metric_type):
+    """
+    value in = ("cpu/targetAverage:10")
+    value out = ({"type": instance,
+                  "name": "cpu",
+                  "value_type": "targetAverage",
+                  "value": 10})
+    """
+
+    if value is None:
+        return None
+
+    old_values = value
+    new_values = []
+
+    for old_value in old_values:
+        try:
+            name, values = old_value.split("/", 1)
+            value_type, value = values.split(":", 1)
+            value = float(value)
+        except Exception as e:
+            debug_msg = "Error occurred while validating autoscaling {} with value {}: {}" \
+                .format(metric_type, old_value, e)
+            clilogger.CliLogger().debug(debug_msg)
+
+            msg = "value need to be in format resource_name/value_type:value for example cpu/targetAverage:60" \
+                .format(old_value)
+            raise click.BadParameter(msg)
+
+        new_value = {"type": metric_type,
+                     "name": name,
+                     "value_type": value_type,
+                     "value": value}
+        new_values.append(new_value)
+
+    return tuple(new_values)
+
+
+def validate_autoscaling_metric(ctx, param, value):
+    return validate_autoscaling_metric_or_resource(ctx, param, value, "Metric")
+
+
+def validate_autoscaling_resource(ctx, param, value):
+    return validate_autoscaling_metric_or_resource(ctx, param, value, "Resource")
 
 
 @cli.group("deployments", help="Manage deployments", cls=ClickGroup)
@@ -86,7 +132,6 @@ def deployments_metrics():
     "--instanceCount",
     "instance_count",
     type=int,
-    required=True,
     help="Number of machine instances",
     cls=common.GradientOption,
 )
@@ -200,7 +245,6 @@ def deployments_metrics():
     "--workspace",
     "workspace",
     help="Path to workspace directory, archive, S3 or git repository",
-    default="none",
     cls=common.GradientOption,
 )
 @click.option(
@@ -219,6 +263,40 @@ def deployments_metrics():
     "--workspacePassword",
     "workspace_password",
     help="Workspace password",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--minInstanceCount",
+    "min_instance_count",
+    help="Minimal instance count",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--maxInstanceCount",
+    "max_instance_count",
+    help="Maximal instance count",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--scaleCooldownPeriod",
+    "scale_cooldown_period",
+    help="Scale cooldown period",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--metric",
+    "metrics",
+    multiple=True,
+    callback=validate_autoscaling_metric,
+    help="Autoscaling metrics. Example: my_metric/targetAverage:21.37",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--resource",
+    "resources",
+    multiple=True,
+    callback=validate_autoscaling_resource,
+    help="Autoscaling resources. Example: cpu/target:60",
     cls=common.GradientOption,
 )
 @api_key_option
@@ -470,7 +548,6 @@ def delete_deployment(id_, options_file, api_key):
     "--workspace",
     "workspace",
     help="Path to workspace directory, archive, S3 or git repository",
-    default="none",
     cls=common.GradientOption,
 )
 @click.option(
@@ -490,6 +567,40 @@ def delete_deployment(id_, options_file, api_key):
     "--workspacePassword",
     "workspace_password",
     help="Workspace password",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--minInstanceCount",
+    "min_instance_count",
+    help="Minimal instance count",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--maxInstanceCount",
+    "max_instance_count",
+    help="Maximal instance count",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--scaleCooldownPeriod",
+    "scale_cooldown_period",
+    help="Scale cooldown period",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--metric",
+    "metrics",
+    multiple=True,
+    callback=validate_autoscaling_metric,
+    help="Autoscaling metrics. Example: my_metric/targetAverage:21.37",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--resource",
+    "resources",
+    multiple=True,
+    callback=validate_autoscaling_resource,
+    help="Autoscaling resources. Example: cpu/target:60",
     cls=common.GradientOption,
 )
 @api_key_option
@@ -592,9 +703,9 @@ def deployment_remove_tags(id, options_file, api_key, **kwargs):
     "--metric",
     "metrics_list",
     multiple=True,
-    type=ChoiceType(constants.METRICS_MAP, case_sensitive=False),
+    type=str,
     default=(constants.BuiltinMetrics.cpu_percentage, constants.BuiltinMetrics.memory_usage),
-    help="One or more metrics that you want to read. Defaults to cpuPercentage and memoryUsage",
+    help=("One or more metrics that you want to read: {}. Defaults to cpuPercentage and memoryUsage. To view available custom metrics, use command: `gradient deployments metrics list`".format(', '.join(map(str, constants.METRICS_MAP)))),
     cls=common.GradientOption,
 )
 @click.option(
@@ -623,6 +734,45 @@ def deployment_remove_tags(id, options_file, api_key, **kwargs):
 def get_deployment_metrics(deployment_id, metrics_list, interval, start, end, options_file, api_key):
     command = GetDeploymentMetricsCommand(api_key=api_key)
     command.execute(deployment_id, start, end, interval, built_in_metrics=metrics_list)
+
+@deployments_metrics.command(
+    "list",
+    short_help="List model deployment metrics",
+    help="List model deployment metrics. Shows CPU and RAM usage by default",
+)
+@click.option(
+    "--id",
+    "deployment_id",
+    required=True,
+    cls=common.GradientOption,
+    help="ID of the model deployment",
+)
+@click.option(
+    "--interval",
+    "interval",
+    default="30s",
+    help="Interval",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--start",
+    "start",
+    type=click.DateTime(),
+    help="Timestamp of first time series metric to collect",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--end",
+    "end",
+    type=click.DateTime(),
+    help="Timestamp of last time series metric to collect",
+    cls=common.GradientOption,
+)
+@api_key_option
+@common.options_file
+def list_deployment_metrics(deployment_id, interval, start, end, options_file, api_key):
+    command = ListDeploymentMetricsCommand(api_key=api_key)
+    command.execute(deployment_id, start, end, interval)
 
 
 @deployments_metrics.command(

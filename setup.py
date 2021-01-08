@@ -27,13 +27,8 @@ class VerifyVersionCommand(install):
     description = 'verify that the git tag matches our version'
 
     def run(self):
-        tag = os.getenv('CIRCLE_TAG')
-
-        if tag != version:
-            info = "Git tag: {0} does not match the version of this app: {1}".format(
-                tag, version
-            )
-            sys.exit(info)
+        if '0.0.0' == version:
+            sys.exit("Version unspecified")
 
 
 setup(
@@ -61,12 +56,12 @@ setup(
     install_requires=[
         'requests[security]',
         'six',
-        'click>=7.0',
+        'click==7.1.2',
         'terminaltables',
         'click-didyoumean',
         'click-help-colors',
         'click-completion',
-        'colorama==0.3.9',
+        'colorama==0.4.3',
         'requests-toolbelt',
         'progressbar2',
         'halo',
@@ -75,7 +70,7 @@ setup(
         'PyYAML==5.*',
         'python-dateutil==2.*',
         'websocket-client==0.57.*',
-        'gradient-utils>=0.1.1',
+        'gradient-utils>=0.1.2',
     ],
     entry_points={'console_scripts': [
         'gradient = gradient:main.main',

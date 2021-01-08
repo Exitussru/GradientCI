@@ -6,7 +6,7 @@ Remember that in code snippets all highlighted lines are required other lines ar
 from .base_client import BaseClient, TagsSupportMixin
 from ..models import Artifact, Job
 from ..repositories.jobs import ListJobs, ListJobLogs, ListJobArtifacts, CreateJob, DeleteJob, StopJob, \
-    DeleteJobArtifacts, GetJobArtifacts, GetJobMetrics, StreamJobMetrics
+    DeleteJobArtifacts, GetJobArtifacts, GetJobMetrics, ListJobMetrics, StreamJobMetrics
 
 
 class JobsClient(TagsSupportMixin, BaseClient):
@@ -40,7 +40,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
             is_public=None,
             working_directory=None,
             experiment_id=None,
-            job_env=None,
+            env_vars=None,
             use_dockerfile=None,
             is_preemptible=None,
             project=None,
@@ -57,6 +57,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
             registry_target_password=None,
             build_only=False,
             tags=None,
+            datasets=None,
     ):
         """
         Method to create and start job in paperspace gradient.
@@ -75,9 +76,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
                 name='Example job',
                 command='pip install -r requirements.txt && python mnist.py',
                 ports='5000:5000',
-                job_env={
-                    'CUSTOM_ENV'='Some value that will be set as system environment',
-                }
+                env_vars={'CUSTOM_ENV': 'Some value that will be set as system environment'}
             )
 
         :param str machine_type: Type of machine on which job should run. This field is **required**.
@@ -113,7 +112,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
         :param str working_directory: location of code to run. By default ``/paperspace``
         :param str experiment_id: Id of experiment to which job should be connected. If not provided there will be
             created new experiment for this job.
-        :param dict job_env: key value collection of envs that are used in code
+        :param dict env_vars: key value collection of envs that are used in code
         :param bool use_dockerfile: determines whether to build from Dockerfile (default false).
             Do not include a --container argument when using this flag.
         :param bool is_preemptible: flag if we you want to use spot instance. By default False
@@ -133,6 +132,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
         :param str registry_target_password: password for custom docker registry
         :param bool build_only: determines whether to only build and not run image
         :param list[str] tags: List of tags
+        :param list[object] datasets: List of input/output datasets
 
         :returns: Job handle
         :rtype: str
@@ -151,7 +151,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
             is_public=is_public,
             working_directory=working_directory,
             experiment_id=experiment_id,
-            job_env=job_env,
+            env_vars=env_vars,
             use_dockerfile=use_dockerfile,
             is_preemptible=is_preemptible,
             project=project,
@@ -167,6 +167,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
             registry_target_username=registry_target_username,
             registry_target_password=registry_target_password,
             build_only=build_only,
+            datasets=datasets,
         )
         repository = self.build_repository(CreateJob)
         handle = repository.create(job, data=data)
@@ -249,7 +250,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
         )
         return jobs
 
-    def logs(self, job_id, line=0, limit=10000):
+    def logs(self, job_id, line=1, limit=10000):
         """
         Method to retrieve job logs.
 
@@ -274,7 +275,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
         logs = repository.list(id=job_id, line=line, limit=limit)
         return logs
 
-    def yield_logs(self, job_id, line=0, limit=10000):
+    def yield_logs(self, job_id, line=1, limit=10000):
         """Get log generator. Polls the API for new logs
 
         .. code-block:: python
@@ -342,7 +343,7 @@ class JobsClient(TagsSupportMixin, BaseClient):
         data = repository.get(jobId=job_id)
         return data
 
-    def artifacts_list(self, job_id, files=None, size=False, links=True):
+    def artifacts_list(self, job_id, files=None, size=False, links=True, start_after=None):
         """
         Method to retrieve all artifacts files.
 
@@ -354,20 +355,21 @@ class JobsClient(TagsSupportMixin, BaseClient):
                 job_id='your_job_id_here',
                 files='your_files,here',
                 size=False,
-                links=True
+                links=True,
+                start_after='key',
             )
 
         :param str job_id: to limit artifact from this job.
         :param str files: to limit result only to file names provided. You can use wildcard option ``*``.
         :param bool size: flag to show file size. Default value is set to False.
         :param bool links: flag to show file url. Default value is set to True.
+        :params str start_after: key to list after
 
         :returns: list of files with description if specified from job artifacts.
-        :rtype: list[Artifact]
+        :rtype: Pagination
         """
         repository = self.build_repository(ListJobArtifacts)
-        artifacts = repository.list(jobId=job_id, files=files, links=links, size=size)
-        return artifacts
+        return repository.list(jobId=job_id, files=files, links=links, size=size, start_after=start_after)
 
     def get_metrics(self, job_id, start=None, end=None, interval="30s", built_in_metrics=None):
         """Get job metrics
@@ -391,6 +393,26 @@ class JobsClient(TagsSupportMixin, BaseClient):
             end=end,
             interval=interval,
             built_in_metrics=built_in_metrics,
+        )
+        return metrics
+
+    def list_metrics(self, job_id, start=None, end=None, interval="30s"):
+        """List job metrics
+
+        :param str job_id: ID of a job
+        :param datetime.datetime|str start:
+        :param datetime.datetime|str end:
+        :param str interval:
+        :returns: Metrics of a job
+        :rtype: dict[str,dict[str,list[dict]]]
+        """
+
+        repository = self.build_repository(ListJobMetrics)
+        metrics = repository.get(
+            id=job_id,
+            start=start,
+            end=end,
+            interval=interval,
         )
         return metrics
 

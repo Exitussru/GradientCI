@@ -36,7 +36,16 @@ LIST_OF_EXPERIMENTS_RESPONSE_JSON = {
                 },
                 "triggerEvent": None,
                 "triggerEventId": None
-            }
+            },
+            "datasets": [
+                {
+                    "uri": "s3://some/dataset",
+                    "volume_options": {
+                        "kind": "dynamic",
+                        "size": "10Gi",
+                    },
+                },
+            ],
         },
         {
             "dtCreated": "2019-03-21T07:46:57.706055+00:00",
@@ -4586,7 +4595,16 @@ DETAILS_OF_SINGLE_NODE_EXPERIMENT_RESPONSE_JSON = {
             },
             "triggerEvent": None,
             "triggerEventId": None
-        }
+        },
+        "datasets": [
+            {
+                "uri": "s3://some/dataset",
+                "volume_options": {
+                    "kind": "dynamic",
+                    "size": "10Gi",
+                },
+            },
+        ],
     },
     "message": "success"
 }
@@ -5702,20 +5720,22 @@ TENSORBOARD_DELETE_RESPONSE_JSON = {
     "message": "success"
 }
 
-LIST_JOB_FILES_RESPONSE_JSON = [
-    {
-        "file": "hello.txt",
-        "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/hello.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=7CT5k6buEmZe5k5E7g6BXMs2xV4%3D&response-content-disposition=attachment%3Bfilename%3D%22hello.txt%22&x-amz-security-token=some_amz_security_token"
-    },
-    {
-        "file": "hello2.txt",
-        "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/hello2.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=L1lI47cNyiROzdYkf%2FF3Cm3165E%3D&response-content-disposition=attachment%3Bfilename%3D%22hello2.txt%22&x-amz-security-token=some_amz_security_token"
-    },
-    {
-        "file": "keton/elo.txt",
-        "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/keton/elo.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=tHriojGx03S%2FKkVGQGVI5CQRFTo%3D&response-content-disposition=attachment%3Bfilename%3D%22elo.txt%22&x-amz-security-token=some_amz_security_token"
-    }
-]
+LIST_JOB_FILES_RESPONSE_JSON = {
+    'data': [
+        {
+            "file": "hello.txt",
+            "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/hello.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=7CT5k6buEmZe5k5E7g6BXMs2xV4%3D&response-content-disposition=attachment%3Bfilename%3D%22hello.txt%22&x-amz-security-token=some_amz_security_token"
+        },
+        {
+            "file": "hello2.txt",
+            "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/hello2.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=L1lI47cNyiROzdYkf%2FF3Cm3165E%3D&response-content-disposition=attachment%3Bfilename%3D%22hello2.txt%22&x-amz-security-token=some_amz_security_token"
+        },
+        {
+            "file": "keton/elo.txt",
+            "url": "https://ps-projects.s3.amazonaws.com/some/path/artifacts/keton/elo.txt?AWSAccessKeyId=some_aws_access_key_id&Expires=713274132&Signature=tHriojGx03S%2FKkVGQGVI5CQRFTo%3D&response-content-disposition=attachment%3Bfilename%3D%22elo.txt%22&x-amz-security-token=some_amz_security_token"
+        }
+    ],
+}
 
 GET_PRESIGNED_URL_FOR_S3_BUCKET_RESPONSE_JSON = {
     "data": {
@@ -5932,7 +5952,32 @@ GET_DEPLOYMENT_DETAILS_JSON_RESPONSE = {
             "method": None,
             "tags": ["tag1", "tag2"],
             "metricsURL": "aws-testing.paperspace.io",
-        }
+            "autoscaling": {
+                "minInstanceCount": 4,
+                "maxInstanceCount": 64,
+                "scaleCooldownPeriod": 123,
+                "metrics": [
+                    {
+                        "type": "Resource",
+                        "name": "cpu",
+                        "valueType": "targetAverage",
+                        "value": 10,
+                    },
+                    {
+                        "type": "Metric",
+                        "name": "loss",
+                        "valueType": "target",
+                        "value": 2,
+                    },
+                    {
+                        "type": "Metric",
+                        "name": "keton",
+                        "valueType": "target",
+                        "value": 21.37,
+                    },
+                ],
+            },
+        },
     ],
     "total": 129,
     "displayTotal": 129,
@@ -8062,3 +8107,199 @@ DEPLOYMENTS_LOGS_RESPONSE = [
         "message": "PSEOF"
     }
 ]
+
+LIST_SECRETS_RESPONSE = [
+    {
+        "name": "aws_access_key_id"
+    },
+    {
+        "name": "aws_secret_access_key"
+    }
+]
+
+LIST_DATASETS_RESPONSE = [
+    {
+        "description": None,
+        "dtCreated": "2020-10-09T18:34:07.097Z",
+        "dtModified": "2020-10-09T18:34:07.097Z",
+        "id": "dsttn2y7j1ux882",
+        "name": "test1",
+        "storageProvider": {
+            "config": {
+                "accessKey": "AKIAVWO7J5OJV4XSVOPA",
+                "bucket": "chris-dev-cluster",
+                "secretAccessKey": "********"
+            },
+            "dtCreated": "2020-10-09T18:17:34.192Z",
+            "dtModified": "2020-10-09T18:29:22.368Z",
+            "id": "spltautet072md4",
+            "name": "test1",
+            "type": "s3"
+        }
+    }
+]
+
+SHOW_DATASET_DETAILS_RESPONSE = {
+    "description": None,
+    "dtCreated": "2020-10-09T18:34:07.097Z",
+    "dtModified": "2020-10-09T18:34:07.097Z",
+    "id": "dsttn2y7j1ux882",
+    "name": "test1",
+    "storageProvider": {
+        "config": {
+            "accessKey": "AKIAVWO7J5OJV4XSVOPA",
+            "bucket": "chris-dev-cluster",
+            "secretAccessKey": "********"
+        },
+        "dtCreated": "2020-10-09T18:17:34.192Z",
+        "dtModified": "2020-10-09T18:29:22.368Z",
+        "id": "spltautet072md4",
+        "name": "test1",
+        "type": "s3"
+    }
+}
+
+CREATE_DATASET_RESPONSE = {
+    "description": None,
+    "dtCreated": "2020-10-09T18:34:07.097Z",
+    "dtModified": "2020-10-09T18:34:07.097Z",
+    "id": "dsttn2y7j1ux882",
+    "name": "test1",
+    "storageProvider": {
+        "config": {
+            "accessKey": "AKIAVWO7J5OJV4XSVOPA",
+            "bucket": "chris-dev-cluster",
+            "secretAccessKey": "********"
+        },
+        "dtCreated": "2020-10-09T18:17:34.192Z",
+        "dtModified": "2020-10-09T18:29:22.368Z",
+        "id": "spltautet072md4",
+        "name": "test1",
+        "type": "s3"
+    }
+}
+
+UPDATE_DATASET_RESPONSE = {
+    "description": "Test dataset",
+    "dtCreated": "2020-10-09T18:34:07.097Z",
+    "dtModified": "2020-10-09T18:34:07.097Z",
+    "id": "dsttn2y7j1ux882",
+    "name": "test1",
+    "storageProvider": {
+        "config": {
+            "accessKey": "AKIAVWO7J5OJV4XSVOPA",
+            "bucket": "chris-dev-cluster",
+            "secretAccessKey": "********"
+        },
+        "dtCreated": "2020-10-09T18:17:34.192Z",
+        "dtModified": "2020-10-09T18:29:22.368Z",
+        "id": "spltautet072md4",
+        "name": "test1",
+        "type": "s3"
+    }
+}
+
+LIST_DATASET_VERSIONS_RESPONSE = [
+    {
+        "dtCreated": "2020-10-29T22:56:15.514Z",
+        "dtModified": "2020-10-29T22:56:16.213Z",
+        "isCommitted": True,
+        "message": None,
+        "tags": [
+            {
+                "name": "hello"
+            }
+        ],
+        "version": "1rn19s2"
+    }
+]
+
+SHOW_DATASET_VERSION_DETAILS_RESPONSE = {
+    "dtCreated": "2020-10-29T22:56:15.514Z",
+    "dtModified": "2020-10-29T22:56:16.213Z",
+    "isCommitted": True,
+    "message": None,
+    "tags": [
+        {
+            "name": "hello"
+        }
+    ],
+    "version": "1rn19s2"
+}
+
+UPDATE_DATASET_VERSION_RESPONSE = {
+    "dtCreated": "2020-10-29T22:56:15.514Z",
+    "dtModified": "2020-10-29T23:27:14.955Z",
+    "isCommitted": True,
+    "message": "Test message",
+    "tags": [
+        {
+            "name": "hello"
+        }
+    ],
+    "version": "1rn19s2"
+}
+
+SET_DATASET_VERSION_TAG_RESPONSE = {
+    "dtCreated": "2020-10-29T22:57:40.723Z",
+    "dtModified": "2020-10-29T23:48:42.948Z",
+    "name": "hello",
+    "version": {
+        "message": "Test message",
+        "version": "1rn19s2"
+    }
+}
+
+LIST_STORAGE_PROVIDERS_RESPONSE = [
+    {
+        "config": {
+            "accessKey": "AKIBAEG7J3OJ24XAV33B",
+            "bucket": "bucket",
+            "secretAccessKey": "********"
+        },
+        "dtCreated": "2020-10-09T18:17:34.192Z",
+        "dtModified": "2020-10-09T18:29:22.368Z",
+        "id": "spltautet072md4",
+        "name": "test1",
+        "type": "s3"
+    }
+]
+
+SHOW_STORAGE_PROVIDER_DETAILS_RESPONSE = {
+    "config": {
+        "accessKey": "AKIBAEG7J3OJ24XAV33B",
+        "bucket": "bucket",
+        "secretAccessKey": "********"
+    },
+    "dtCreated": "2020-10-09T18:17:34.192Z",
+    "dtModified": "2020-10-09T18:29:22.368Z",
+    "id": "spltautet072md4",
+    "name": "test1",
+    "type": "s3"
+}
+
+CREATE_STORAGE_PROVIDER_RESPONSE = {
+    "config": {
+        "accessKey": "AKIBAEG7J3OJ24XAV33B",
+        "bucket": "bucket",
+        "secretAccessKey": "********"
+    },
+    "dtCreated": "2020-10-09T18:17:34.192Z",
+    "dtModified": "2020-10-09T18:29:22.368Z",
+    "id": "spltautet072md4",
+    "name": "test1",
+    "type": "s3"
+}
+
+UPDATE_STORAGE_PROVIDER_RESPONSE = {
+    "config": {
+        "accessKey": "AKIBAEG7J3OJ24XAV33B",
+        "bucket": "bucket",
+        "secretAccessKey": "********"
+    },
+    "dtCreated": "2020-10-09T18:17:34.192Z",
+    "dtModified": "2020-10-09T18:29:22.368Z",
+    "id": "spltautet072md4",
+    "name": "test2",
+    "type": "s3"
+}

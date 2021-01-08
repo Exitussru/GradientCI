@@ -25,7 +25,6 @@ class TestCreateHyperparameters(object):
         "--workerCommand", "some worker command",
         "--workerCount", "1",
         "--projectId", "some_project_id",
-        "--workspace", "none",
     ]
     COMMAND_WITH_TAGS = [
         "experiments", "hyperparameters", "create",
@@ -36,7 +35,6 @@ class TestCreateHyperparameters(object):
         "--workerCommand", "some worker command",
         "--workerCount", "1",
         "--projectId", "some_project_id",
-        "--workspace", "none",
         "--tag", "test0",
         "--tag", "test1",
         "--tags", "test2,test3",
@@ -122,7 +120,7 @@ class TestCreateHyperparameters(object):
 
     EXPECTED_RESPONSE = {"handle": "eshgvasywz9k1w", "message": "success"}
     EXPECTED_STDOUT = "Hyperparameter tuning job created with ID: eshgvasywz9k1w\n" \
-                      "https://www.paperspace.com/console/projects/some_project_id/experiments/eshgvasywz9k1w\n"
+                      "https://console.paperspace.com/projects/some_project_id/experiments/eshgvasywz9k1w\n"
 
     EXPECTED_RESPONSE_JSON_WITH_ERROR = {
         "details": {
@@ -142,7 +140,6 @@ class TestCreateHyperparameters(object):
         "--workerCommand", "some worker command",
         "--workerCount", "1",
         "--projectId", "some_project_id",
-        "--workspace", "none",
         "--apiKey", "some_key",
     ]
     EXPECTED_REQUEST_JSON_WHEN_API_KEY_PARAMETERS_WAS_USED = {
@@ -396,7 +393,7 @@ class TestCreateAndStartHyperparameters(object):
 
     EXPECTED_RESPONSE = {"handle": "eshgvasywz9k1w", "message": "success"}
     EXPECTED_STDOUT = "Hyperparameter tuning job created and started with ID: eshgvasywz9k1w\n" \
-                      "https://www.paperspace.com/console/projects/some_project_id/experiments/eshgvasywz9k1w\n"
+                      "https://console.paperspace.com/projects/some_project_id/experiments/eshgvasywz9k1w\n"
 
     EXPECTED_RESPONSE_JSON_WITH_ERROR = {
         "details": {
@@ -417,7 +414,6 @@ class TestCreateAndStartHyperparameters(object):
         "--workerCount", "1",
         "--projectId", "some_project_id",
         "--apiKey", "some_key",
-        "--workspace", "none",
     ]
     EXPECTED_REQUEST_JSON_WHEN_API_KEY_PARAMETERS_WAS_USED = {
         "workerContainer": "some_container",

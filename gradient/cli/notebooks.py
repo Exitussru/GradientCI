@@ -3,10 +3,10 @@ import click
 from gradient.api_sdk import constants
 from gradient.cli import common
 from gradient.cli.cli import cli
-from gradient.cli.cli_types import ChoiceType
+from gradient.cli.cli_types import ChoiceType, json_string
 from gradient.cli.common import validate_comma_split_option, api_key_option, ClickGroup
 from gradient.commands import notebooks
-from gradient.commands.notebooks import GetNotebookMetricsCommand, StreamNotebookMetricsCommand
+from gradient.commands.notebooks import GetNotebookMetricsCommand, ListNotebookMetricsCommand, StreamNotebookMetricsCommand
 
 
 @cli.group("notebooks", help="Manage notebooks", cls=common.ClickGroup)
@@ -26,32 +26,34 @@ def notebook_metrics():
 
 @notebooks_group.command("create", help="Create new notebook")
 @click.option(
-    "--clusterId",
-    "cluster_id",
-    type=str,
-    required=True,
-    help="Cluster ID",
-    cls=common.GradientOption,
-)
-@click.option(
     "--machineType",
-    "vm_type_label",
+    "machine_type",
+    required=True,
     type=str,
     help="Virtual Machine type label e.g. P5000",
     cls=common.GradientOption,
 )
 @click.option(
-    "--containerId",
-    "container_id",
-    type=int,
-    help="Container ID",
+    "--container",
+    "container",
+    required=True,
+    type=str,
+    help="Container name",
     cls=common.GradientOption,
 )
 @click.option(
-    "--container",
-    "container_name",
+    "--projectId",
+    "project_id",
+    required=True,
     type=str,
-    help="Container name",
+    help="Project ID",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--clusterId",
+    "cluster_id",
+    type=str,
+    help="Cluster ID",
     cls=common.GradientOption,
 )
 @click.option(
@@ -77,7 +79,7 @@ def notebook_metrics():
 )
 @click.option(
     "--command",
-    "default_entrypoint",
+    "command",
     type=str,
     help="Command (executed as `/bin/sh -c 'YOUR COMMAND'`)",
     cls=common.GradientOption,
@@ -113,6 +115,38 @@ def notebook_metrics():
     cls=common.GradientOption,
 )
 @click.option(
+    "--environment",
+    "environment",
+    type=json_string,
+    help="Environmental variables",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspace",
+    "workspace",
+    help="S3 url or git repository. Directory uploads are not yet supported",
+    default="none",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceRef",
+    "workspace_ref",
+    help="Git commit hash, branch name or tag",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspaceUsername",
+    "workspace_username",
+    metavar="<username>",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--workspacePassword",
+    "workspace_password",
+    help="Workspace password",
+    cls=common.GradientOption,
+)
+@click.option(
     "--tag",
     "tags",
     multiple=True,
@@ -143,7 +177,8 @@ def create_notebook(api_key, options_file, **notebook):
 )
 @click.option(
     "--machineType",
-    "vm_type_label",
+    "machine_type",
+    required=True,
     type=str,
     help="Virtual Machine type label e.g. P5000",
     cls=common.GradientOption,
@@ -152,7 +187,6 @@ def create_notebook(api_key, options_file, **notebook):
     "--clusterId",
     "cluster_id",
     type=str,
-    required=True,
     help="Cluster ID",
     cls=common.GradientOption,
 )
@@ -203,14 +237,23 @@ def start_notebook(api_key, options_file, **notebook):
 @click.option(
     "--id",
     "id_",
+    required=True,
     help="Notebook ID",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--projectId",
+    "project_id",
+    required=True,
+    type=str,
+    help="Project ID",
     cls=common.GradientOption,
 )
 @common.api_key_option
 @common.options_file
-def delete_notebook(id_, api_key, options_file):
+def fork_notebook(id_, project_id, api_key, options_file):
     command = notebooks.ForkNotebookCommand(api_key=api_key)
-    command.execute(id_=id_)
+    command.execute(id_=id_, project_id=project_id)
 
 
 @notebooks_group.command("delete", help="Delete existing notebook")
@@ -338,9 +381,9 @@ def notebook_remove_tags(id, options_file, api_key, **kwargs):
     "--metric",
     "metrics_list",
     multiple=True,
-    type=ChoiceType(constants.METRICS_MAP, case_sensitive=False),
+    type=str,
     default=(constants.BuiltinMetrics.cpu_percentage, constants.BuiltinMetrics.memory_usage),
-    help="One or more metrics that you want to read. Defaults to cpuPercentage and memoryUsage",
+    help=("One or more metrics that you want to read: {}. Defaults to cpuPercentage and memoryUsage. To view available custom metrics, use command: `gradient notebooks metrics list`".format(', '.join(map(str, constants.METRICS_MAP)))),
     cls=common.GradientOption,
 )
 @click.option(
@@ -369,6 +412,46 @@ def notebook_remove_tags(id, options_file, api_key, **kwargs):
 def get_deployment_metrics(notebook_id, metrics_list, interval, start, end, options_file, api_key):
     command = GetNotebookMetricsCommand(api_key=api_key)
     command.execute(notebook_id, start, end, interval, built_in_metrics=metrics_list)
+
+
+@notebook_metrics.command(
+    "list",
+    short_help="List notebook metrics",
+    help="List notebook metrics. Shows CPU and RAM usage by default",
+)
+@click.option(
+    "--id",
+    "notebook_id",
+    required=True,
+    cls=common.GradientOption,
+    help="ID of the notebook",
+)
+@click.option(
+    "--interval",
+    "interval",
+    default="30s",
+    help="Interval",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--start",
+    "start",
+    type=click.DateTime(),
+    help="Timestamp of first time series metric to collect",
+    cls=common.GradientOption,
+)
+@click.option(
+    "--end",
+    "end",
+    type=click.DateTime(),
+    help="Timestamp of last time series metric to collect",
+    cls=common.GradientOption,
+)
+@api_key_option
+@common.options_file
+def list_deployment_metrics(notebook_id, interval, start, end, options_file, api_key):
+    command = ListNotebookMetricsCommand(api_key=api_key)
+    command.execute(notebook_id, start, end, interval)
 
 
 @notebook_metrics.command(
@@ -427,6 +510,7 @@ def artifacts():
 @click.option(
     "--id",
     "notebook_id",
+    required=True,
     cls=common.GradientOption,
     help="ID of the notebook",
 )
@@ -459,3 +543,36 @@ def list_artifacts(notebook_id, size, links, files, options_file, api_key=None):
     command = notebooks.ArtifactsListCommand(api_key=api_key)
     command.execute(notebook_id=notebook_id, size=size, links=links, files=files)
 
+@notebooks_group.command("logs", help="List notebook logs")
+@click.option(
+    "--id",
+    "notebook_id",
+    required=True,
+    cls=common.GradientOption,
+)
+@click.option(
+    "--line",
+    "line",
+    required=False,
+    default=0,
+    cls=common.GradientOption,
+)
+@click.option(
+    "--limit",
+    "limit",
+    required=False,
+    default=10000,
+    cls=common.GradientOption,
+)
+@click.option(
+    "--follow",
+    "follow",
+    required=False,
+    default=False,
+    cls=common.GradientOption,
+)
+@api_key_option
+@common.options_file
+def list_logs(notebook_id, line, limit, follow, options_file, api_key=None):
+    command = notebooks.NotebookLogsCommand(api_key=api_key)
+    command.execute(notebook_id, line, limit, follow)
